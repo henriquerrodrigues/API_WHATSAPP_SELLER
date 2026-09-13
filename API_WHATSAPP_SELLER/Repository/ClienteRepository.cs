@@ -24,7 +24,7 @@ namespace API_WHATSAPP_SELLER.Repository
         public async Task<int> CreateClienteAsync(Cliente newCliente)
         {
             const string sql = @"
-                INSERT INTO TB_CLIENTE
+                INSERT INTO tb_cliente
                 (
                     CLI_NOME,
                     CLI_EMAIL,
@@ -87,7 +87,7 @@ namespace API_WHATSAPP_SELLER.Repository
                     CLI_CREATED_AT,
                     CLI_LAST_UPDATED_AT
                FROM
-                    TB_CLIENTE
+                    tb_cliente
                WHERE 
                     CLI_TELEFONE = @CLI_TELEFONE;
             ";
@@ -110,7 +110,7 @@ namespace API_WHATSAPP_SELLER.Repository
                     CLI_CREATED_AT,
                     CLI_LAST_UPDATED_AT
                FROM
-                    TB_CLIENTE
+                    tb_cliente
                WHERE 
                     CLI_CPFCNPJ = @CLI_CPFCNPJ;
             ";

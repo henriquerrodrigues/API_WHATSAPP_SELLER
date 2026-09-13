@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "OFIhh27cJBQ=",
+  "dgSpecHash": "XyWGHN9x1Yk=",
   "success": true,
   "projectFilePath": "C:\\Users\\rafae\\Projetos\\API_WHATSAPP_SELLER\\API_WHATSAPP_SELLER\\API_WHATSAPP_SELLER.csproj",
   "expectedPackageFiles": [
@@ -39,7 +39,11 @@
     "C:\\Users\\rafae\\.nuget\\packages\\system.text.encoding\\4.3.0\\system.text.encoding.4.3.0.nupkg.sha512",
     "C:\\Users\\rafae\\.nuget\\packages\\system.threading\\4.3.0\\system.threading.4.3.0.nupkg.sha512",
     "C:\\Users\\rafae\\.nuget\\packages\\system.threading.tasks\\4.3.0\\system.threading.tasks.4.3.0.nupkg.sha512",
-    "C:\\Users\\rafae\\.nuget\\packages\\twilio\\7.14.9\\twilio.7.14.9.nupkg.sha512"
+    "C:\\Users\\rafae\\.nuget\\packages\\twilio\\7.14.9\\twilio.7.14.9.nupkg.sha512",
+    "C:\\Users\\rafae\\.nuget\\packages\\microsoft.windowsdesktop.app.ref\\8.0.31\\microsoft.windowsdesktop.app.ref.8.0.31.nupkg.sha512",
+    "C:\\Users\\rafae\\.nuget\\packages\\microsoft.netcore.app.ref\\8.0.31\\microsoft.netcore.app.ref.8.0.31.nupkg.sha512",
+    "C:\\Users\\rafae\\.nuget\\packages\\microsoft.aspnetcore.app.ref\\8.0.31\\microsoft.aspnetcore.app.ref.8.0.31.nupkg.sha512",
+    "C:\\Users\\rafae\\.nuget\\packages\\microsoft.netcore.app.host.win-x64\\8.0.31\\microsoft.netcore.app.host.win-x64.8.0.31.nupkg.sha512"
   ],
   "logs": []
 }

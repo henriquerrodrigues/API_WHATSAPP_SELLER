@@ -36,7 +36,7 @@ namespace API_WHATSAPP_SELLER.Repository
                     CON_EMAIL,
                     CON_ULTIMA_INTERACAO
                 FROM
-                    TB_CONVERSA
+                    tb_conversa
                 WHERE
                     CON_TELEFONE = @CON_TELEFONE
             ";
