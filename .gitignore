@@ -1,0 +1,42 @@
+## Visual Studio / JetBrains Rider
+/[Oo]bj/
+/[Bb]in/
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+
+## VS Code
+.vscode/
+
+## .NET Core / ASP.NET Core / App Settings
+# Ignora arquivos de configuração específicos do ambiente/desenvolvedor
+appsettings.Development.json
+appsettings.Production.json
+appsettings.Local.json
+
+# NOTA: Se você quiser que o appsettings.json principal seja versionado como um modelo,
+# mas ignore os valores reais, use a abordagem abaixo (mantém o appsettings.json base, 
+# mas você pode ignorar instâncias locais se preferir).
+# Geralmente, a boa prática é versionar um 'appsettings.json' padrão (com valores genéricos/vazios)
+# e ignorar os arquivos de override locais.
+
+## Logs e Arquivos Temporários
+*.log
+*.sqlite
+*.db
+
+## Build Output / Publish
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+build/
+bld/
+publish/
+
+## Test Results
+[Tt]est[Rr]esults/
+*.trx
+*.coverage
+*.coveragexml

@@ -1,8 +1,8 @@
-﻿using API_WHATSAPP_SELLER.Interfaces;
-using API_WHATSAPP_SELLER.Models;
-using Dapper;
+﻿using Dapper;
 using System.Data;
 using MySqlConnector;
+using API_WHATSAPP_SELLER.Models;
+using API_WHATSAPP_SELLER.Interfaces;
 
 namespace API_WHATSAPP_SELLER.Repository
 {

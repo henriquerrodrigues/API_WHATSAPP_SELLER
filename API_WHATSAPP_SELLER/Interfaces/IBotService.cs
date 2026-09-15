@@ -1,6 +1,4 @@
-﻿using API_WHATSAPP_SELLER.Models;
-
-namespace API_WHATSAPP_SELLER.Interfaces
+﻿namespace API_WHATSAPP_SELLER.Interfaces
 {
     public interface IBotService
     {

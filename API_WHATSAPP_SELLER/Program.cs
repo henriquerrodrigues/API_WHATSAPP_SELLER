@@ -20,10 +20,18 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddScoped<IConversaRepository, ConversaRepository>();
 builder.Services.AddScoped<IClienteRepository, ClienteRepository>();
+builder.Services.AddScoped<IPedidoRepository, PedidoRepository>();
+
 builder.Services.AddScoped<IClienteService, ClienteService>();
+builder.Services.AddScoped<IPedidoService, PedidoService>();
+
 builder.Services.AddScoped<ITwilioService, TwilioService>();
-builder.Services.Configure<TwilioSettings>(builder.Configuration.GetSection("Twilio"));
+builder.Services.Configure<TwilioSettings>(
+    builder.Configuration.GetSection("Twilio")
+);
+
 builder.Services.AddScoped<IBotService, BotService>();
+
 
 var app = builder.Build();
 

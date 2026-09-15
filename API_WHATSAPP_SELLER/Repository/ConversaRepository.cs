@@ -32,9 +32,11 @@ namespace API_WHATSAPP_SELLER.Repository
                     CON_STATUS,
                     CON_ETAPA,
                     CON_CPF,
+                    CON_CLICODIGO,
                     CON_NOME,
                     CON_EMAIL,
-                    CON_ULTIMA_INTERACAO
+                    CON_ULTIMA_INTERACAO,
+                    CON_ULTIMA_MENSAGEM
                 FROM
                     tb_conversa
                 WHERE
@@ -79,18 +81,17 @@ namespace API_WHATSAPP_SELLER.Repository
         public async Task<int> Atualizar(Conversa conversa)
         {
             const string sql = @"
-                UPDATE
-                    tb_conversa 
+                UPDATE tb_conversa 
                 SET 
                     CON_STATUS = @CON_STATUS,
                     CON_ETAPA = @CON_ETAPA,
                     CON_CPF = @CON_CPF,
+                    CON_CLICODIGO = @CON_CLICODIGO,
                     CON_NOME = @CON_NOME,
                     CON_EMAIL = @CON_EMAIL,
-                    CON_ULTIMA_INTERACAO = NOW() -- Atualiza a última interação para o momento atual
-                WHERE 
-                    CON_CODIGO = @CON_CODIGO;
-            ";
+                    CON_ULTIMA_INTERACAO = NOW(),
+                    CON_ULTIMA_MENSAGEM = @CON_ULTIMA_MENSAGEM
+                WHERE CON_CODIGO = @CON_CODIGO;";
 
             using var conn = Connection();
             return await conn.ExecuteAsync(sql, conversa);

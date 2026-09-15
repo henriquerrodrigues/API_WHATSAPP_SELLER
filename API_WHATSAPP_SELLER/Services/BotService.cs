@@ -9,15 +9,18 @@ namespace API_WHATSAPP_SELLER.Services
         private readonly ITwilioService _twilioService;
         private readonly IConversaRepository _conversaRepository;
         private readonly IClienteService _clienteService;
+        private readonly IPedidoService _pedidoService;
 
         public BotService(
             ITwilioService twilioService,
             IConversaRepository conversaRepository,
-            IClienteService clienteService)
+            IClienteService clienteService,
+            IPedidoService pedidoService)
         {
             _twilioService = twilioService;
             _conversaRepository = conversaRepository;
             _clienteService = clienteService;
+            _pedidoService = pedidoService;
         }
 
         public async Task ProcessarMensagem(string telefone, string mensagem)
@@ -52,13 +55,13 @@ namespace API_WHATSAPP_SELLER.Services
                     await ProcessarMenu(conversa, mensagem);
                     break;
 
-                // case EtapaConversa.NovoPedido:
-                //     await ProcessarNovoPedido(conversa, mensagem);
-                //     break;
+                case EtapaConversa.NovoPedido:
+                    await ProcessarNovoPedido(conversa, mensagem);
+                    break;
 
-                // case EtapaConversa.AcompanhandoPedido:
-                //     await ProcessarAcompanhamentoPedido(conversa, mensagem);
-                //     break;
+                case EtapaConversa.AcompanhandoPedido:
+                    await ProcessarAcompanhamentoPedido(conversa, mensagem);
+                    break;
             }
         }
 
@@ -84,13 +87,16 @@ namespace API_WHATSAPP_SELLER.Services
             if (cliente != null)
             {
                 conversa.CON_CPF = cliente.CLI_CPFCNPJ;
+                conversa.CON_CLICODIGO = cliente.CLI_CODIGO;
                 conversa.CON_ETAPA = EtapaConversa.MenuCliente;
 
                 await _conversaRepository.Atualizar(conversa);
 
                 await _twilioService.EnviarMensagem(
                     conversa.CON_TELEFONE,
-                    $"Olá {cliente.CLI_NOME}!\n\n1 - Novo Pedido\n2 - Acompanhar Pedido");
+                    $"Olá {cliente.CLI_NOME}!\n\n" +
+                    "1 - Novo Pedido\n" +
+                    "2 - Acompanhar Pedido");
 
                 return;
             }
@@ -131,34 +137,47 @@ namespace API_WHATSAPP_SELLER.Services
 
         private async Task ProcessarTelefone(Conversa conversa, string telefone)
         {
-            await _clienteService.CreateClienteAsync(new Cliente
+            var cliente = new Cliente
             {
                 CLI_NOME = conversa.CON_NOME,
                 CLI_EMAIL = conversa.CON_EMAIL,
                 CLI_TELEFONE = telefone,
                 CLI_CPFCNPJ = conversa.CON_CPF
-            });
+            };
 
+            var codigoCliente = await _clienteService.CreateClienteAsync(cliente);
+
+            conversa.CON_CLICODIGO = codigoCliente;
             conversa.CON_ETAPA = EtapaConversa.MenuCliente;
 
             await _conversaRepository.Atualizar(conversa);
 
             await _twilioService.EnviarMensagem(
                 conversa.CON_TELEFONE,
-                "Cadastro realizado!\n\n1 - Novo Pedido\n2 - Acompanhar Pedido");
+                "Cadastro realizado!\n\n" +
+                "1 - Novo Pedido\n" +
+                "2 - Acompanhar Pedido");
         }
 
         private async Task ProcessarMenu(Conversa conversa, string opcao)
         {
-            switch (opcao)
+            switch (opcao.Trim())
             {
                 case "1":
+                    conversa.CON_ETAPA = EtapaConversa.NovoPedido;
+                    conversa.CON_ULTIMA_MENSAGEM = string.Empty; // Limpa o acumulador
+                    await _conversaRepository.Atualizar(conversa);
+
                     await _twilioService.EnviarMensagem(
                         conversa.CON_TELEFONE,
-                        "Vamos iniciar um novo pedido.");
+                        "🛒 *Novo Pedido Iniciado*\n\n" +
+                        "Digite a quantidade e o nome do produto que deseja adicionar (Ex: `1x sorvete de chocolate`).");
                     break;
 
                 case "2":
+                    conversa.CON_ETAPA = EtapaConversa.AcompanhandoPedido;
+                    await _conversaRepository.Atualizar(conversa);
+
                     await _twilioService.EnviarMensagem(
                         conversa.CON_TELEFONE,
                         "Informe o número do pedido.");
@@ -167,9 +186,127 @@ namespace API_WHATSAPP_SELLER.Services
                 default:
                     await _twilioService.EnviarMensagem(
                         conversa.CON_TELEFONE,
-                        "Opção inválida.\n\n1 - Novo Pedido\n2 - Acompanhar Pedido");
+                        "Opção inválida.\n\n" +
+                        "1 - Novo Pedido\n" +
+                        "2 - Acompanhar Pedido");
                     break;
             }
+        }
+
+        private async Task ProcessarNovoPedido(Conversa conversa, string mensagem)
+        {
+            var textoDigitado = mensagem.Trim();
+
+            // Se o cliente digitou "terminar", processamos o carrinho atual sem incluir a palavra "terminar"
+            if (textoDigitado.Equals("terminar", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!conversa.CON_CLICODIGO.HasValue)
+                {
+                    await _twilioService.EnviarMensagem(conversa.CON_TELEFONE, "Erro de identificação do cliente. Reiniciando...");
+                    conversa.CON_ETAPA = EtapaConversa.AguardandoCpf;
+                    conversa.CON_ULTIMA_MENSAGEM = string.Empty;
+                    await _conversaRepository.Atualizar(conversa);
+                    return;
+                }
+
+                var corpoPedido = conversa.CON_ULTIMA_MENSAGEM ?? string.Empty;
+
+                if (string.IsNullOrWhiteSpace(corpoPedido))
+                {
+                    await _twilioService.EnviarMensagem(
+                        conversa.CON_TELEFONE,
+                        "Nenhum item foi adicionado ao pedido. Envie pelo menos um item ou digite o menu.");
+                    return;
+                }
+
+                var pedido = new Pedido
+                {
+                    PED_CLICODIGO = conversa.CON_CLICODIGO.Value,
+                    PED_CORPO = corpoPedido, // Contém apenas os produtos puros enviados anteriormente
+                    PED_DATA_PEDIDO = DateTime.Now,
+                    PED_TOTAL = 0
+                };
+
+                var idPedidoGerado = await _pedidoService.CreatePedidoAsync(pedido);
+
+                conversa.CON_ETAPA = EtapaConversa.MenuCliente;
+                conversa.CON_ULTIMA_MENSAGEM = string.Empty; // Limpa o carrinho
+                await _conversaRepository.Atualizar(conversa);
+
+                await _twilioService.EnviarMensagem(
+                    conversa.CON_TELEFONE,
+                    $"✅ *Pedido finalizado com sucesso!*\n\n" +
+                    $"📦 *Código do seu pedido:* `{idPedidoGerado}`\n" +
+                    $"Guarde esse número para acompanhar seu pedido futuramente.\n\n" +
+                    "1 - Novo Pedido\n" +
+                    "2 - Acompanhar Pedido");
+                return;
+            }
+
+            // Se NÃO digitou terminar, é um item válido do pedido. Acumulamos na coluna.
+            if (string.IsNullOrEmpty(conversa.CON_ULTIMA_MENSAGEM))
+            {
+                conversa.CON_ULTIMA_MENSAGEM = textoDigitado;
+            }
+            else
+            {
+                conversa.CON_ULTIMA_MENSAGEM += "\n" + textoDigitado;
+            }
+
+            await _conversaRepository.Atualizar(conversa);
+
+            await _twilioService.EnviarMensagem(
+                conversa.CON_TELEFONE,
+                "➕ Item adicionado ao carrinho!\n\n" +
+                "Envie o próximo produto ou digite *terminar* para concluir o pedido.");
+        }
+
+        private async Task ProcessarAcompanhamentoPedido(Conversa conversa, string mensagem)
+        {
+            var textoDigitado = mensagem.Trim();
+
+            // Tenta converter o que o usuário digitou em um número de ID válido
+            if (!int.TryParse(textoDigitado, out var codigoPedido))
+            {
+                await _twilioService.EnviarMensagem(
+                    conversa.CON_TELEFONE,
+                    "⚠️ Código inválido. Por favor, digite apenas o **número** do código do pedido (ex: `15`) ou envie `0` para voltar ao menu.");
+                return;
+            }
+
+            if (codigoPedido == 0)
+            {
+                conversa.CON_ETAPA = EtapaConversa.MenuCliente;
+                await _conversaRepository.Atualizar(conversa);
+                await _twilioService.EnviarMensagem(
+                    conversa.CON_TELEFONE,
+                    "Menu Principal:\n\n1 - Novo Pedido\n2 - Acompanhar Pedido");
+                return;
+            }
+
+            // Busca o pedido no banco pelo ID informado
+            var pedido = await _pedidoService.BuscarPorId(codigoPedido); // (Ou chame direto o repositório se preferir)
+
+            if (pedido == null)
+            {
+                await _twilioService.EnviarMensagem(
+                    conversa.CON_TELEFONE,
+                    $"❌ Não encontramos nenhum pedido com o código **{codigoPedido}**.\n\nVerifique o número e tente novamente ou digite `0` para voltar ao menu.");
+                return;
+            }
+
+            // Retorna o status encontrado para o usuário e devolve ele para o menu
+            conversa.CON_ETAPA = EtapaConversa.MenuCliente;
+            await _conversaRepository.Atualizar(conversa);
+
+            await _twilioService.EnviarMensagem(
+                conversa.CON_TELEFONE,
+                $"📦 *Consulta de Pedido*\n\n" +
+                $"• *Código:* `{pedido.PED_CODIGO}`\n" +
+                $"• *Status atual:* *{pedido.PED_STATUS ?? "Recebido"}*\n" +
+                $"• *Data:* {pedido.PED_DATA_PEDIDO:dd/MM/yyyy HH:mm}\n\n" +
+                "1 - Novo Pedido\n" +
+                "2 - Acompanhar Pedido");
         }
     }
 }
