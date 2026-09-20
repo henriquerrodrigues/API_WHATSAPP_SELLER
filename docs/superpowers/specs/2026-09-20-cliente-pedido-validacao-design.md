@@ -24,6 +24,11 @@ Local: `ClienteService`, `PedidoService`, `BotService` (camada de serviço/bot �
 - **Não** calcula dígito verificador — fora de escopo, decisão explícita do usuário.
 - Inválido → bot reenvia a mesma pergunta ("CPF/CNPJ inválido, digite novamente"), permanece na etapa `AguardandoCpf`.
 
+### Busca de cliente por CPF ou telefone (`ProcessarCpf`)
+- Ao receber CPF/CNPJ válido, `BotService` busca primeiro por CPF (`IClienteService.BuscaPorCpf`). Se não encontrar, busca por `CON_TELEFONE` (`IClienteRepository.GetByTelefoneAsync`, já existe no repositório, hoje sem uso).
+- Encontrado por telefone (mesmo com CPF digitado diferente do cadastrado): trata como cliente já cadastrado, segue com os dados do banco (nome, CPF, código), pula direto para `MenuCliente`. O CPF digitado nessa mensagem é descartado — não sobrescreve o cadastro.
+- Não encontrado nem por CPF nem por telefone: fluxo atual, segue para `AguardandoNome` como cliente novo, usando o CPF digitado.
+
 ### E-mail
 - Regex formato padrão: `^[^@\s]+@[^@\s]+\.[^@\s]+$`.
 - Inválido → bot reenvia a pergunta, permanece na etapa `AguardandoEmail`.
@@ -83,6 +88,8 @@ Remove `SET FOREIGN_KEY_CHECKS = 0;` / `SET FOREIGN_KEY_CHECKS = 1;` do SQL em `
 ### Casos de teste — `BotService`
 - Fluxo feliz completo: telefone novo → `AguardandoCpf` → CPF não encontrado → `AguardandoNome` → nome → `AguardandoEmail` → e-mail → cliente criado → `MenuCliente` → opção "1" → `NovoPedido` → item válido acumulado → "terminar" → pedido criado → confirmação enviada com código do pedido → volta pro `MenuCliente`.
 - CPF já cadastrado → pula direto para `MenuCliente`, sem passar por nome/e-mail.
+- CPF não encontrado, mas telefone já cadastrado (com CPF diferente) → pula direto para `MenuCliente` usando dados do cliente existente, CPF digitado descartado.
+- CPF não encontrado e telefone não encontrado → segue fluxo de cliente novo (`AguardandoNome`).
 - CPF inválido (tamanho errado) → conversa permanece em `AguardandoCpf`, mensagem de erro reenviada, `IConversaRepository.Atualizar` não muda a etapa.
 - E-mail inválido → conversa permanece em `AguardandoEmail`, mensagem de erro reenviada.
 - Item de pedido em formato não reconhecido → mensagem de erro enviada, `CON_ULTIMA_MENSAGEM` não é alterado, etapa continua `NovoPedido`.
