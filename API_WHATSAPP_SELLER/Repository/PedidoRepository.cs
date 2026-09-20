@@ -21,31 +21,29 @@ namespace API_WHATSAPP_SELLER.Repository
             );
 
             var sql = @"
-                    SET FOREIGN_KEY_CHECKS = 0;
-
-                    INSERT INTO tb_pedido 
+                    INSERT INTO tb_pedido
                     (
-                        PED_NUMERO, 
-                        PED_CLICODIGO, 
-                        PED_DATA_PEDIDO, 
-                        PED_TOTAL, 
+                        PED_CLICODIGO,
+                        PED_DATA_PEDIDO,
+                        PED_TOTAL,
                         PED_CORPO
-                    ) 
-                    VALUES 
+                    )
+                    VALUES
                     (
-                        @PED_NUMERO, 
-                        @PED_CLICODIGO, 
-                        @PED_DATA_PEDIDO, 
-                        @PED_TOTAL, 
+                        @PED_CLICODIGO,
+                        @PED_DATA_PEDIDO,
+                        @PED_TOTAL,
                         @PED_CORPO
                     );
 
-                    SET FOREIGN_KEY_CHECKS = 1;
+                    UPDATE tb_pedido SET PED_NUMERO = LAST_INSERT_ID() WHERE PED_CODIGO = LAST_INSERT_ID();
 
                     SELECT LAST_INSERT_ID();
                 ";
 
-            // Executa o bloco inteiro na mesma sessão e pega o ID gerado pela última instrução (SELECT)
+            // LAST_INSERT_ID() é escopado à conexão/sessão MySQL e não muda entre as chamadas
+            // acima, então repeti-lo evita depender de variável de usuário (@novo_id), que
+            // exigiria "Allow User Variables=True" na connection string do MySqlConnector.
             return await connection.ExecuteScalarAsync<int>(sql, newPedido);
         }
         public async Task<List<Pedido>> GetPedidosAsync()

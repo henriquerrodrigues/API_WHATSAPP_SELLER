@@ -1,4 +1,4 @@
-﻿using API_WHATSAPP_SELLER.Models;
+using API_WHATSAPP_SELLER.Models;
 
 namespace API_WHATSAPP_SELLER.Interfaces
 {
@@ -7,5 +7,7 @@ namespace API_WHATSAPP_SELLER.Interfaces
         Task<int> CreateClienteAsync(Cliente newCliente);
         Task<List<Cliente>> GetClientesAsync();
         Task<Cliente> BuscarPorCpf(string cpf);
+        Task<Cliente?> GetByTelefoneAsync(string telefone);
+        Task<Cliente?> GetByCodigoAsync(int codigo);
     }
 }

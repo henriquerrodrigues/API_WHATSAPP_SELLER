@@ -1,4 +1,4 @@
-﻿using API_WHATSAPP_SELLER.Interfaces;
+using API_WHATSAPP_SELLER.Interfaces;
 using API_WHATSAPP_SELLER.Models;
 using System.Text.RegularExpressions;
 
@@ -6,15 +6,59 @@ namespace API_WHATSAPP_SELLER.Services
 {
     public class PedidoService : IPedidoService
     {
-        private readonly IPedidoRepository _pedidoRepository;
+        private static readonly Regex ItemRegex = new(@"^(\d+)\s*(?:[xX])?\s*(.+)$", RegexOptions.Compiled);
 
-        public PedidoService(IPedidoRepository pedidoRepository)
+        private readonly IPedidoRepository _pedidoRepository;
+        private readonly IClienteRepository _clienteRepository;
+
+        public PedidoService(IPedidoRepository pedidoRepository, IClienteRepository clienteRepository)
         {
             _pedidoRepository = pedidoRepository;
+            _clienteRepository = clienteRepository;
+        }
+
+        public ItemPedidoValidacao ValidarLinhaItem(string linha)
+        {
+            var texto = (linha ?? string.Empty).Trim();
+
+            var match = ItemRegex.Match(texto);
+
+            if (!match.Success)
+            {
+                return new ItemPedidoValidacao { Resultado = ItemPedidoValidacaoResultado.FormatoInvalido };
+            }
+
+            if (!int.TryParse(match.Groups[1].Value, out var quantidade))
+            {
+                return new ItemPedidoValidacao { Resultado = ItemPedidoValidacaoResultado.FormatoInvalido };
+            }
+
+            var produto = match.Groups[2].Value.Trim();
+
+            if (quantidade == 0)
+            {
+                return new ItemPedidoValidacao { Resultado = ItemPedidoValidacaoResultado.QuantidadeZero };
+            }
+
+            if (quantidade > 100)
+            {
+                return new ItemPedidoValidacao { Resultado = ItemPedidoValidacaoResultado.QuantidadeMuitoAlta };
+            }
+
+            return new ItemPedidoValidacao
+            {
+                Resultado = ItemPedidoValidacaoResultado.Valido,
+                LinhaNormalizada = $"{quantidade}X {produto.ToUpperInvariant()}"
+            };
         }
 
         public async Task<int> CreatePedidoAsync(Pedido newPedido)
         {
+            var cliente = await _clienteRepository.GetByCodigoAsync(newPedido.PED_CLICODIGO);
+
+            if (cliente == null)
+                throw new InvalidOperationException($"Cliente {newPedido.PED_CLICODIGO} não encontrado.");
+
             newPedido.PED_CORPO = NormalizarPedido(newPedido.PED_CORPO);
 
             return await _pedidoRepository.CreatePedidoAsync(newPedido);
@@ -33,26 +77,12 @@ namespace API_WHATSAPP_SELLER.Services
 
             foreach (var linha in linhas)
             {
-                var texto = linha.Trim();
+                var validacao = ValidarLinhaItem(linha);
 
-                // Procura algo como:
-                // 1x Chocolate
-                // 2 x Morango
-                // 3X Pistache
-                var match = Regex.Match(
-                    texto,
-                    @"^(\d+)\s*(?:[xX])?\s*(.+)$"
-                );
-
-                if (!match.Success)
+                if (validacao.Resultado != ItemPedidoValidacaoResultado.Valido)
                     continue;
 
-                var quantidade = match.Groups[1].Value;
-                var produto = match.Groups[2].Value.Trim();
-
-                produto = produto.ToUpperInvariant();
-
-                itens.Add($"{quantidade}X {produto}");
+                itens.Add(validacao.LinhaNormalizada!);
             }
 
             if (itens.Count == 0)
