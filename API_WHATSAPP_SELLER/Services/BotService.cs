@@ -47,10 +47,6 @@ namespace API_WHATSAPP_SELLER.Services
                     await ProcessarEmail(conversa, mensagem);
                     break;
 
-                case EtapaConversa.AguardandoTelefone:
-                    await ProcessarTelefone(conversa, mensagem);
-                    break;
-
                 case EtapaConversa.MenuCliente:
                     await ProcessarMenu(conversa, mensagem);
                     break;
@@ -126,22 +122,18 @@ namespace API_WHATSAPP_SELLER.Services
         private async Task ProcessarEmail(Conversa conversa, string email)
         {
             conversa.CON_EMAIL = email;
-            conversa.CON_ETAPA = EtapaConversa.AguardandoTelefone;
 
-            await _conversaRepository.Atualizar(conversa);
-
-            await _twilioService.EnviarMensagem(
-                conversa.CON_TELEFONE,
-                "Informe seu telefone.");
-        }
-
-        private async Task ProcessarTelefone(Conversa conversa, string telefone)
-        {
+            // O telefone já é conhecido de forma confiável via CON_TELEFONE (o
+            // "From" do Twilio, capturado desde a primeira mensagem) — pedir
+            // pro cliente digitar de novo só introduzia divergência (erro de
+            // digitação, número sem o 9 do celular etc.) entre CLI_TELEFONE e
+            // CON_TELEFONE, o que duplicava o cadastro do lado da sincronização
+            // com o Bling.
             var cliente = new Cliente
             {
                 CLI_NOME = conversa.CON_NOME,
                 CLI_EMAIL = conversa.CON_EMAIL,
-                CLI_TELEFONE = telefone,
+                CLI_TELEFONE = conversa.CON_TELEFONE,
                 CLI_CPFCNPJ = conversa.CON_CPF
             };
 
