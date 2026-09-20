@@ -92,7 +92,7 @@ namespace API_WHATSAPP_SELLER.Services
 
             var cliente = await _clienteService.BuscaPorCpf(cpfNormalizado);
 
-            cliente ??= await _clienteRepository.GetByTelefoneAsync(conversa.CON_TELEFONE);
+            cliente ??= await _clienteRepository.GetByTelefoneAsync(NormalizarTelefoneCliente(conversa.CON_TELEFONE));
 
             if (cliente != null)
             {
@@ -301,6 +301,15 @@ namespace API_WHATSAPP_SELLER.Services
                     await _twilioService.EnviarMensagem(
                         conversa.CON_TELEFONE,
                         "Quantidade muito alta, confirme o valor.");
+                    return;
+
+                case ItemPedidoValidacaoResultado.Valido:
+                    break;
+
+                default:
+                    await _twilioService.EnviarMensagem(
+                        conversa.CON_TELEFONE,
+                        "Não entendi esse item, use o formato: 2x produto");
                     return;
             }
 
