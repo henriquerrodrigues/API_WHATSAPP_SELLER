@@ -73,10 +73,10 @@ namespace API_WHATSAPP_SELLER.Tests.Services
         [Fact]
         public async Task ProcessarMensagem_CpfNaoEncontradoMasTelefoneCadastrado_UsaDadosDoClienteExistente()
         {
-            var conversa = NovaConversa(EtapaConversa.AguardandoCpf);
+            var conversa = NovaConversa(EtapaConversa.AguardandoCpf, telefone: "whatsapp:+5511999999999");
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
             _clienteServiceMock.Setup(s => s.BuscaPorCpf("98765432100")).ReturnsAsync((Cliente?)null);
-            _clienteRepositoryMock.Setup(r => r.GetByTelefoneAsync(It.IsAny<string>()))
+            _clienteRepositoryMock.Setup(r => r.GetByTelefoneAsync("11999999999"))
                 .ReturnsAsync(new Cliente { CLI_CODIGO = 5, CLI_NOME = "Ciclana", CLI_CPFCNPJ = "11122233344" });
 
             await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "98765432100");
@@ -84,6 +84,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             conversa.CON_ETAPA.Should().Be(EtapaConversa.MenuCliente);
             conversa.CON_CPF.Should().Be("11122233344");
             conversa.CON_CLICODIGO.Should().Be(5);
+            _clienteRepositoryMock.Verify(r => r.GetByTelefoneAsync("11999999999"), Times.Once);
         }
 
         [Fact]
