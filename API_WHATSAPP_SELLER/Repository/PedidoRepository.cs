@@ -21,31 +21,29 @@ namespace API_WHATSAPP_SELLER.Repository
             );
 
             var sql = @"
-                    SET FOREIGN_KEY_CHECKS = 0;
-
-                    INSERT INTO tb_pedido 
+                    INSERT INTO tb_pedido
                     (
-                        PED_NUMERO, 
-                        PED_CLICODIGO, 
-                        PED_DATA_PEDIDO, 
-                        PED_TOTAL, 
+                        PED_CLICODIGO,
+                        PED_DATA_PEDIDO,
+                        PED_TOTAL,
                         PED_CORPO
-                    ) 
-                    VALUES 
+                    )
+                    VALUES
                     (
-                        @PED_NUMERO, 
-                        @PED_CLICODIGO, 
-                        @PED_DATA_PEDIDO, 
-                        @PED_TOTAL, 
+                        @PED_CLICODIGO,
+                        @PED_DATA_PEDIDO,
+                        @PED_TOTAL,
                         @PED_CORPO
                     );
 
-                    SET FOREIGN_KEY_CHECKS = 1;
+                    SET @novo_id = LAST_INSERT_ID();
 
-                    SELECT LAST_INSERT_ID();
+                    UPDATE tb_pedido SET PED_NUMERO = @novo_id WHERE PED_CODIGO = @novo_id;
+
+                    SELECT @novo_id;
                 ";
 
-            // Executa o bloco inteiro na mesma sessão e pega o ID gerado pela última instrução (SELECT)
+            // Executa insert + update do PED_NUMERO + select do id na mesma conexão/transação implícita
             return await connection.ExecuteScalarAsync<int>(sql, newPedido);
         }
         public async Task<List<Pedido>> GetPedidosAsync()
