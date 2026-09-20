@@ -11,17 +11,20 @@ namespace API_WHATSAPP_SELLER.Services
         private readonly IConversaRepository _conversaRepository;
         private readonly IClienteService _clienteService;
         private readonly IPedidoService _pedidoService;
+        private readonly IClienteRepository _clienteRepository;
 
         public BotService(
             ITwilioService twilioService,
             IConversaRepository conversaRepository,
             IClienteService clienteService,
-            IPedidoService pedidoService)
+            IPedidoService pedidoService,
+            IClienteRepository clienteRepository)
         {
             _twilioService = twilioService;
             _conversaRepository = conversaRepository;
             _clienteService = clienteService;
             _pedidoService = pedidoService;
+            _clienteRepository = clienteRepository;
         }
 
         public async Task ProcessarMensagem(string telefone, string mensagem)
@@ -79,7 +82,17 @@ namespace API_WHATSAPP_SELLER.Services
 
         private async Task ProcessarCpf(Conversa conversa, string cpf)
         {
-            var cliente = await _clienteService.BuscaPorCpf(cpf);
+            if (!_clienteService.TryNormalizarCpfCnpj(cpf, out var cpfNormalizado))
+            {
+                await _twilioService.EnviarMensagem(
+                    conversa.CON_TELEFONE,
+                    "CPF/CNPJ inválido, digite novamente.");
+                return;
+            }
+
+            var cliente = await _clienteService.BuscaPorCpf(cpfNormalizado);
+
+            cliente ??= await _clienteRepository.GetByTelefoneAsync(conversa.CON_TELEFONE);
 
             if (cliente != null)
             {
@@ -98,7 +111,7 @@ namespace API_WHATSAPP_SELLER.Services
                 return;
             }
 
-            conversa.CON_CPF = cpf;
+            conversa.CON_CPF = cpfNormalizado;
             conversa.CON_ETAPA = EtapaConversa.AguardandoNome;
 
             await _conversaRepository.Atualizar(conversa);
@@ -110,7 +123,15 @@ namespace API_WHATSAPP_SELLER.Services
 
         private async Task ProcessarNome(Conversa conversa, string nome)
         {
-            conversa.CON_NOME = nome;
+            if (!_clienteService.NomeValido(nome))
+            {
+                await _twilioService.EnviarMensagem(
+                    conversa.CON_TELEFONE,
+                    "Nome inválido, digite novamente.");
+                return;
+            }
+
+            conversa.CON_NOME = nome.Trim();
             conversa.CON_ETAPA = EtapaConversa.AguardandoEmail;
 
             await _conversaRepository.Atualizar(conversa);
@@ -122,6 +143,14 @@ namespace API_WHATSAPP_SELLER.Services
 
         private async Task ProcessarEmail(Conversa conversa, string email)
         {
+            if (!_clienteService.EmailValido(email))
+            {
+                await _twilioService.EnviarMensagem(
+                    conversa.CON_TELEFONE,
+                    "E-mail inválido, digite novamente.");
+                return;
+            }
+
             conversa.CON_EMAIL = email;
 
             // O telefone já é conhecido de forma confiável via CON_TELEFONE (o
@@ -251,7 +280,30 @@ namespace API_WHATSAPP_SELLER.Services
                 return;
             }
 
-            // Se NÃO digitou terminar, é um item válido do pedido. Acumulamos na coluna.
+            // Se NÃO digitou terminar, valida o item antes de acumular.
+            var validacao = _pedidoService.ValidarLinhaItem(textoDigitado);
+
+            switch (validacao.Resultado)
+            {
+                case ItemPedidoValidacaoResultado.FormatoInvalido:
+                    await _twilioService.EnviarMensagem(
+                        conversa.CON_TELEFONE,
+                        "Não entendi esse item, use o formato: 2x produto");
+                    return;
+
+                case ItemPedidoValidacaoResultado.QuantidadeZero:
+                    await _twilioService.EnviarMensagem(
+                        conversa.CON_TELEFONE,
+                        "Não entendi esse item, use o formato: 2x produto");
+                    return;
+
+                case ItemPedidoValidacaoResultado.QuantidadeMuitoAlta:
+                    await _twilioService.EnviarMensagem(
+                        conversa.CON_TELEFONE,
+                        "Quantidade muito alta, confirme o valor.");
+                    return;
+            }
+
             if (string.IsNullOrEmpty(conversa.CON_ULTIMA_MENSAGEM))
             {
                 conversa.CON_ULTIMA_MENSAGEM = textoDigitado;
