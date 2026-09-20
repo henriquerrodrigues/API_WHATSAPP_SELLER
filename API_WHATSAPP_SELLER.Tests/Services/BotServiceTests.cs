@@ -26,6 +26,9 @@ namespace API_WHATSAPP_SELLER.Tests.Services
                 _pedidoServiceMock.Object,
                 _clienteRepositoryMock.Object);
 
+            // Fakes simplificados (mais permissivos que as regras reais em ClienteService,
+            // que tem cobertura propria em ClienteServiceTests.cs) — aqui so precisamos de
+            // um comportamento previsivel para testar a orquestracao do BotService.
             _clienteServiceMock
                 .Setup(s => s.TryNormalizarCpfCnpj(It.IsAny<string>(), out It.Ref<string>.IsAny))
                 .Returns((string input, out string normalizado) =>
