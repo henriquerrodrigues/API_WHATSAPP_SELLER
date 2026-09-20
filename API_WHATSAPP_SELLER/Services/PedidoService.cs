@@ -28,7 +28,11 @@ namespace API_WHATSAPP_SELLER.Services
                 return new ItemPedidoValidacao { Resultado = ItemPedidoValidacaoResultado.FormatoInvalido };
             }
 
-            var quantidade = int.Parse(match.Groups[1].Value);
+            if (!int.TryParse(match.Groups[1].Value, out var quantidade))
+            {
+                return new ItemPedidoValidacao { Resultado = ItemPedidoValidacaoResultado.FormatoInvalido };
+            }
+
             var produto = match.Groups[2].Value.Trim();
 
             if (quantidade == 0)
