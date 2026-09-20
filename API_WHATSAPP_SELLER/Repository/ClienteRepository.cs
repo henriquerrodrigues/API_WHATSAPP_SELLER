@@ -98,6 +98,28 @@ namespace API_WHATSAPP_SELLER.Repository
             return await conn.QueryFirstOrDefaultAsync<Cliente>(sql, new { Telefone = telefone });
         }
 
+        public async Task<Cliente?> GetByCodigoAsync(int codigo)
+        {
+            const string sql = @"
+                SELECT
+                    CLI_CODIGO,
+                    CLI_NOME,
+                    CLI_EMAIL,
+                    CLI_TELEFONE,
+                    CLI_CPFCNPJ,
+                    CLI_CREATED_AT,
+                    CLI_LAST_UPDATED_AT
+               FROM
+                    tb_cliente
+               WHERE
+                    CLI_CODIGO = @CLI_CODIGO;
+            ";
+
+            using var conn = Connection();
+
+            return await conn.QueryFirstOrDefaultAsync<Cliente>(sql, new { CLI_CODIGO = codigo });
+        }
+
         public async Task<Cliente?> BuscarPorCpf(string cpf)
         {
             const string sql = @"
