@@ -36,14 +36,14 @@ namespace API_WHATSAPP_SELLER.Repository
                         @PED_CORPO
                     );
 
-                    SET @novo_id = LAST_INSERT_ID();
+                    UPDATE tb_pedido SET PED_NUMERO = LAST_INSERT_ID() WHERE PED_CODIGO = LAST_INSERT_ID();
 
-                    UPDATE tb_pedido SET PED_NUMERO = @novo_id WHERE PED_CODIGO = @novo_id;
-
-                    SELECT @novo_id;
+                    SELECT LAST_INSERT_ID();
                 ";
 
-            // Executa insert + update do PED_NUMERO + select do id na mesma conexão/transação implícita
+            // LAST_INSERT_ID() é escopado à conexão/sessão MySQL e não muda entre as chamadas
+            // acima, então repeti-lo evita depender de variável de usuário (@novo_id), que
+            // exigiria "Allow User Variables=True" na connection string do MySqlConnector.
             return await connection.ExecuteScalarAsync<int>(sql, newPedido);
         }
         public async Task<List<Pedido>> GetPedidosAsync()
