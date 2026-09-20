@@ -1,6 +1,7 @@
 ﻿using API_WHATSAPP_SELLER.Interfaces;
 using API_WHATSAPP_SELLER.Models;
 using API_WHATSAPP_SELLER.Models.Enum;
+using System.Linq;
 
 namespace API_WHATSAPP_SELLER.Services
 {
@@ -133,7 +134,7 @@ namespace API_WHATSAPP_SELLER.Services
             {
                 CLI_NOME = conversa.CON_NOME,
                 CLI_EMAIL = conversa.CON_EMAIL,
-                CLI_TELEFONE = conversa.CON_TELEFONE,
+                CLI_TELEFONE = NormalizarTelefoneCliente(conversa.CON_TELEFONE),
                 CLI_CPFCNPJ = conversa.CON_CPF
             };
 
@@ -149,6 +150,21 @@ namespace API_WHATSAPP_SELLER.Services
                 "Cadastro realizado!\n\n" +
                 "1 - Novo Pedido\n" +
                 "2 - Acompanhar Pedido");
+        }
+
+        // Espelha internal/clienteconversa/domain/telefone.go (NormalizarTelefoneCliente)
+        // do lado bling-go: extrai só dígitos e remove o DDI 55 quando presente,
+        // pra CLI_TELEFONE ficar no mesmo formato usado na sincronização com o
+        // Bling ("11952793798", sem "whatsapp:+55" e sem exceder o varchar(20)
+        // da coluna).
+        private static string NormalizarTelefoneCliente(string numero)
+        {
+            var digitos = new string(numero.Where(char.IsDigit).ToArray());
+            if ((digitos.Length == 12 || digitos.Length == 13) && digitos.StartsWith("55"))
+            {
+                return digitos[2..];
+            }
+            return digitos;
         }
 
         private async Task ProcessarMenu(Conversa conversa, string opcao)
