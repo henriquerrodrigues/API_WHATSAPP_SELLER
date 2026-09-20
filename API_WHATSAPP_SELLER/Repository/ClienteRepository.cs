@@ -95,7 +95,7 @@ namespace API_WHATSAPP_SELLER.Repository
             using var conn = Connection();
 
             // Use QueryFirstOrDefaultAsync: se encontrar, retorna o Cliente. Se não, retorna null.
-            return await conn.QueryFirstOrDefaultAsync<Cliente>(sql, new { Telefone = telefone });
+            return await conn.QueryFirstOrDefaultAsync<Cliente>(sql, new { CLI_TELEFONE = telefone });
         }
 
         public async Task<Cliente?> GetByCodigoAsync(int codigo)
