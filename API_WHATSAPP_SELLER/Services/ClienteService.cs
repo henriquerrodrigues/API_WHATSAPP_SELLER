@@ -31,6 +31,12 @@ namespace API_WHATSAPP_SELLER.Services
             if (foto == null)
                 throw new ArgumentNullException(nameof(foto));
 
+            if (foto.FOT_CONTEUDO == null || foto.FOT_CONTEUDO.Length == 0)
+                throw new ArgumentException("A foto não pode estar vazia.", nameof(foto));
+
+            if (string.IsNullOrWhiteSpace(foto.FOT_CONTENT_TYPE))
+                throw new ArgumentException("O content-type da foto é obrigatório.", nameof(foto));
+
             return await _clienteRepository.CreateClienteComFotoAsync(newCliente, foto);
         }
 

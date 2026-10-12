@@ -75,27 +75,20 @@ namespace API_WHATSAPP_SELLER.Repository
         // Cliente e foto entram juntos ou nenhum entra: sem foto não existe
         // cadastro novo pelo bot, e cliente sem foto gravado deixaria a
         // conversa presa pedindo a foto de alguém que já existe.
+        // Se algo falhar antes do commit, o dispose da tx não commitada faz o rollback.
         public async Task<int> CreateClienteComFotoAsync(Cliente newCliente, FotoCliente foto)
         {
             await using var conn = new MySqlConnection(_configuration.GetConnectionString("WppSellerDB"));
             await conn.OpenAsync();
             await using var tx = await conn.BeginTransactionAsync();
 
-            try
-            {
-                var id = await conn.ExecuteScalarAsync<int>(InsertClienteSql, newCliente, tx);
+            var id = await conn.ExecuteScalarAsync<int>(InsertClienteSql, newCliente, tx);
 
-                foto.FOT_CLICODIGO = id;
-                await conn.ExecuteAsync(InsertFotoSql, foto, tx);
+            foto.FOT_CLICODIGO = id;
+            await conn.ExecuteAsync(InsertFotoSql, foto, tx);
 
-                await tx.CommitAsync();
-                return id;
-            }
-            catch
-            {
-                await tx.RollbackAsync();
-                throw;
-            }
+            await tx.CommitAsync();
+            return id;
         }
 
         public async Task<List<Cliente>> GetClientesAsync()

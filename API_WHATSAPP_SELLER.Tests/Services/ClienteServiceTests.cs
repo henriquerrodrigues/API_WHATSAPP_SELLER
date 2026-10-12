@@ -118,12 +118,34 @@ namespace API_WHATSAPP_SELLER.Tests.Services
         public async Task CreateClienteComFotoAsync_Valido_DelegaParaRepositorio()
         {
             var cliente = new Cliente { CLI_NOME = "Fulano" };
-            var foto = new FotoCliente { FOT_CONTEUDO = new byte[] { 1 } };
+            var foto = new FotoCliente { FOT_CONTEUDO = new byte[] { 1 }, FOT_CONTENT_TYPE = "image/jpeg" };
             _clienteRepositoryMock.Setup(r => r.CreateClienteComFotoAsync(cliente, foto)).ReturnsAsync(42);
 
             var codigo = await _sut.CreateClienteComFotoAsync(cliente, foto);
 
             codigo.Should().Be(42);
+        }
+
+        [Fact]
+        public async Task CreateClienteComFotoAsync_FotoSemConteudo_LancaArgumentException()
+        {
+            var foto = new FotoCliente { FOT_CONTEUDO = Array.Empty<byte>(), FOT_CONTENT_TYPE = "image/jpeg" };
+
+            var act = () => _sut.CreateClienteComFotoAsync(new Cliente { CLI_NOME = "Fulano" }, foto);
+
+            await act.Should().ThrowAsync<ArgumentException>();
+            _clienteRepositoryMock.Verify(r => r.CreateClienteComFotoAsync(It.IsAny<Cliente>(), It.IsAny<FotoCliente>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task CreateClienteComFotoAsync_FotoSemContentType_LancaArgumentException()
+        {
+            var foto = new FotoCliente { FOT_CONTEUDO = new byte[] { 1 }, FOT_CONTENT_TYPE = " " };
+
+            var act = () => _sut.CreateClienteComFotoAsync(new Cliente { CLI_NOME = "Fulano" }, foto);
+
+            await act.Should().ThrowAsync<ArgumentException>();
+            _clienteRepositoryMock.Verify(r => r.CreateClienteComFotoAsync(It.IsAny<Cliente>(), It.IsAny<FotoCliente>()), Times.Never);
         }
     }
 }
