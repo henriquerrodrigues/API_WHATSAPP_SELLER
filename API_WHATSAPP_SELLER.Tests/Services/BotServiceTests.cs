@@ -1,8 +1,10 @@
+using API_WHATSAPP_SELLER.Exceptions;
 using API_WHATSAPP_SELLER.Interfaces;
 using API_WHATSAPP_SELLER.Models;
 using API_WHATSAPP_SELLER.Models.Enum;
 using API_WHATSAPP_SELLER.Services;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
 
@@ -15,6 +17,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
         private readonly Mock<IClienteService> _clienteServiceMock = new();
         private readonly Mock<IPedidoService> _pedidoServiceMock = new();
         private readonly Mock<IClienteRepository> _clienteRepositoryMock = new();
+        private readonly Mock<ITwilioMidiaService> _twilioMidiaServiceMock = new();
         private readonly BotService _sut;
 
         public BotServiceTests()
@@ -24,7 +27,9 @@ namespace API_WHATSAPP_SELLER.Tests.Services
                 _conversaRepositoryMock.Object,
                 _clienteServiceMock.Object,
                 _pedidoServiceMock.Object,
-                _clienteRepositoryMock.Object);
+                _clienteRepositoryMock.Object,
+                _twilioMidiaServiceMock.Object,
+                NullLogger<BotService>.Instance);
 
             // Fakes simplificados (mais permissivos que as regras reais em ClienteService,
             // que tem cobertura propria em ClienteServiceTests.cs) — aqui so precisamos de
@@ -49,12 +54,34 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             return new Conversa { CON_TELEFONE = telefone, CON_ETAPA = etapa };
         }
 
+        private Task Enviar(string telefone, string texto, MidiaRecebida? midia = null)
+        {
+            return _sut.ProcessarMensagem(new MensagemRecebida { Telefone = telefone, Texto = texto, Midia = midia });
+        }
+
+        private const string UrlFoto = "https://api.twilio.com/media/ME1";
+
+        private static MidiaRecebida Foto(string contentType = "image/jpeg")
+        {
+            return new MidiaRecebida { Url = UrlFoto, ContentType = contentType };
+        }
+
+        private Conversa ConversaAguardandoFoto()
+        {
+            var conversa = NovaConversa(EtapaConversa.AguardandoFotoFachada);
+            conversa.CON_CPF = "12345678900";
+            conversa.CON_NOME = "Fulano";
+            conversa.CON_EMAIL = "fulano@teste.com";
+            _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
+            return conversa;
+        }
+
         [Fact]
         public async Task ProcessarMensagem_TelefoneNovo_IniciaConversaAguardandoCpf()
         {
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone("11999999999")).ReturnsAsync((Conversa?)null);
 
-            await _sut.ProcessarMensagem("11999999999", "oi");
+            await Enviar("11999999999", "oi");
 
             _conversaRepositoryMock.Verify(r => r.Criar(It.Is<Conversa>(c => c.CON_ETAPA == EtapaConversa.AguardandoCpf)), Times.Once);
         }
@@ -67,7 +94,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             _clienteServiceMock.Setup(s => s.BuscaPorCpf("12345678900"))
                 .ReturnsAsync(new Cliente { CLI_CODIGO = 1, CLI_NOME = "Fulano", CLI_CPFCNPJ = "12345678900" });
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "12345678900");
+            await Enviar(conversa.CON_TELEFONE, "12345678900");
 
             conversa.CON_ETAPA.Should().Be(EtapaConversa.MenuCliente);
             _conversaRepositoryMock.Verify(r => r.Atualizar(It.Is<Conversa>(c => c.CON_ETAPA == EtapaConversa.MenuCliente)), Times.Once);
@@ -82,7 +109,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             _clienteRepositoryMock.Setup(r => r.GetByTelefoneAsync("11999999999"))
                 .ReturnsAsync(new Cliente { CLI_CODIGO = 5, CLI_NOME = "Ciclana", CLI_CPFCNPJ = "11122233344" });
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "98765432100");
+            await Enviar(conversa.CON_TELEFONE, "98765432100");
 
             conversa.CON_ETAPA.Should().Be(EtapaConversa.MenuCliente);
             conversa.CON_CPF.Should().Be("11122233344");
@@ -98,7 +125,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             _clienteServiceMock.Setup(s => s.BuscaPorCpf("98765432100")).ReturnsAsync((Cliente?)null);
             _clienteRepositoryMock.Setup(r => r.GetByTelefoneAsync(It.IsAny<string>())).ReturnsAsync((Cliente?)null);
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "98765432100");
+            await Enviar(conversa.CON_TELEFONE, "98765432100");
 
             conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoNome);
         }
@@ -109,7 +136,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             var conversa = NovaConversa(EtapaConversa.AguardandoCpf);
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "123");
+            await Enviar(conversa.CON_TELEFONE, "123");
 
             conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoCpf);
             _conversaRepositoryMock.Verify(r => r.Atualizar(It.IsAny<Conversa>()), Times.Never);
@@ -121,7 +148,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             var conversa = NovaConversa(EtapaConversa.AguardandoEmail);
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "emailinvalido");
+            await Enviar(conversa.CON_TELEFONE, "emailinvalido");
 
             conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoEmail);
             _clienteServiceMock.Verify(s => s.CreateClienteAsync(It.IsAny<Cliente>()), Times.Never);
@@ -136,7 +163,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             _pedidoServiceMock.Setup(s => s.ValidarLinhaItem("produto sem quantidade"))
                 .Returns(new ItemPedidoValidacao { Resultado = ItemPedidoValidacaoResultado.FormatoInvalido });
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "produto sem quantidade");
+            await Enviar(conversa.CON_TELEFONE, "produto sem quantidade");
 
             conversa.CON_ULTIMA_MENSAGEM.Should().BeNullOrEmpty();
             conversa.CON_ETAPA.Should().Be(EtapaConversa.NovoPedido);
@@ -151,7 +178,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             _pedidoServiceMock.Setup(s => s.ValidarLinhaItem("101x produto"))
                 .Returns(new ItemPedidoValidacao { Resultado = ItemPedidoValidacaoResultado.QuantidadeMuitoAlta });
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "101x produto");
+            await Enviar(conversa.CON_TELEFONE, "101x produto");
 
             conversa.CON_ULTIMA_MENSAGEM.Should().BeNullOrEmpty();
         }
@@ -164,7 +191,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             conversa.CON_ULTIMA_MENSAGEM = string.Empty;
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "terminar");
+            await Enviar(conversa.CON_TELEFONE, "terminar");
 
             _pedidoServiceMock.Verify(s => s.CreatePedidoAsync(It.IsAny<Pedido>()), Times.Never);
         }
@@ -176,7 +203,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             conversa.CON_CLICODIGO = null;
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "terminar");
+            await Enviar(conversa.CON_TELEFONE, "terminar");
 
             conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoCpf);
         }
@@ -187,7 +214,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             var conversa = NovaConversa(EtapaConversa.MenuCliente);
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "9");
+            await Enviar(conversa.CON_TELEFONE, "9");
 
             conversa.CON_ETAPA.Should().Be(EtapaConversa.MenuCliente);
             _conversaRepositoryMock.Verify(r => r.Atualizar(It.IsAny<Conversa>()), Times.Never);
@@ -200,7 +227,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
             _pedidoServiceMock.Setup(s => s.BuscarPorId(15)).ReturnsAsync(new Pedido { PED_CODIGO = "15", PED_STATUS = "Em preparo", PED_DATA_PEDIDO = DateTime.Now });
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "15");
+            await Enviar(conversa.CON_TELEFONE, "15");
 
             conversa.CON_ETAPA.Should().Be(EtapaConversa.MenuCliente);
             _twilioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, It.Is<string>(m => m.Contains("Em preparo"))), Times.Once);
@@ -213,7 +240,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
             _pedidoServiceMock.Setup(s => s.BuscarPorId(99)).ReturnsAsync((Pedido?)null);
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "99");
+            await Enviar(conversa.CON_TELEFONE, "99");
 
             _twilioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, It.Is<string>(m => m.Contains("Não encontramos"))), Times.Once);
         }
@@ -224,7 +251,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             var conversa = NovaConversa(EtapaConversa.AcompanhandoPedido);
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "0");
+            await Enviar(conversa.CON_TELEFONE, "0");
 
             conversa.CON_ETAPA.Should().Be(EtapaConversa.MenuCliente);
         }
@@ -235,10 +262,190 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             var conversa = NovaConversa(EtapaConversa.AcompanhandoPedido);
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "abc");
+            await Enviar(conversa.CON_TELEFONE, "abc");
 
             conversa.CON_ETAPA.Should().Be(EtapaConversa.AcompanhandoPedido);
             _pedidoServiceMock.Verify(s => s.BuscarPorId(It.IsAny<int>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task ProcessarMensagem_EmailValido_VaiParaAguardandoFotoSemCriarCliente()
+        {
+            var conversa = NovaConversa(EtapaConversa.AguardandoEmail);
+            _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
+
+            await Enviar(conversa.CON_TELEFONE, "fulano@teste.com");
+
+            conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoFotoFachada);
+            conversa.CON_EMAIL.Should().Be("fulano@teste.com");
+            _conversaRepositoryMock.Verify(r => r.Atualizar(conversa), Times.Once);
+            _clienteServiceMock.Verify(s => s.CreateClienteAsync(It.IsAny<Cliente>()), Times.Never);
+            _clienteServiceMock.Verify(s => s.CreateClienteComFotoAsync(It.IsAny<Cliente>(), It.IsAny<FotoCliente>()), Times.Never);
+            _twilioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, "Envie uma foto da fachada do seu estabelecimento."), Times.Once);
+        }
+
+        [Fact]
+        public async Task ProcessarMensagem_FotoSemMidia_PedeFotoENaoBaixa()
+        {
+            var conversa = ConversaAguardandoFoto();
+
+            await Enviar(conversa.CON_TELEFONE, "não tenho foto");
+
+            conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoFotoFachada);
+            _twilioMidiaServiceMock.Verify(m => m.BaixarAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            _conversaRepositoryMock.Verify(r => r.Atualizar(It.IsAny<Conversa>()), Times.Never);
+            _twilioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, "Envie uma foto (JPG, PNG ou WEBP) da fachada do seu estabelecimento."), Times.Once);
+        }
+
+        [Theory]
+        [InlineData("application/pdf")]
+        [InlineData("video/mp4")]
+        public async Task ProcessarMensagem_FotoTipoNaoAceito_RejeitaSemBaixar(string contentType)
+        {
+            var conversa = ConversaAguardandoFoto();
+
+            await Enviar(conversa.CON_TELEFONE, "", Foto(contentType));
+
+            conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoFotoFachada);
+            _twilioMidiaServiceMock.Verify(m => m.BaixarAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            _twilioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, "Envie uma foto (JPG, PNG ou WEBP) da fachada do seu estabelecimento."), Times.Once);
+        }
+
+        [Fact]
+        public async Task ProcessarMensagem_FotoDownloadFalha_PedeReenvioENaoCriaCliente()
+        {
+            var conversa = ConversaAguardandoFoto();
+            _twilioMidiaServiceMock.Setup(m => m.BaixarAsync(UrlFoto, It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new HttpRequestException("500"));
+
+            await Enviar(conversa.CON_TELEFONE, "", Foto());
+
+            conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoFotoFachada);
+            _clienteServiceMock.Verify(s => s.CreateClienteComFotoAsync(It.IsAny<Cliente>(), It.IsAny<FotoCliente>()), Times.Never);
+            _conversaRepositoryMock.Verify(r => r.Atualizar(It.IsAny<Conversa>()), Times.Never);
+            _twilioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, "Não consegui receber a foto, envie novamente."), Times.Once);
+        }
+
+        [Fact]
+        public async Task ProcessarMensagem_FotoUrlForaDoTwilio_PedeReenvioENaoCriaCliente()
+        {
+            var conversa = ConversaAguardandoFoto();
+            _twilioMidiaServiceMock.Setup(m => m.BaixarAsync(UrlFoto, It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new ArgumentException("URL de mídia inválida.", "url"));
+
+            await Enviar(conversa.CON_TELEFONE, "", Foto());
+
+            conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoFotoFachada);
+            _clienteServiceMock.Verify(s => s.CreateClienteComFotoAsync(It.IsAny<Cliente>(), It.IsAny<FotoCliente>()), Times.Never);
+            _conversaRepositoryMock.Verify(r => r.Atualizar(It.IsAny<Conversa>()), Times.Never);
+            _twilioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, "Não consegui receber a foto, envie novamente."), Times.Once);
+        }
+
+        [Fact]
+        public async Task ProcessarMensagem_FotoDownloadVazio_PedeReenvioENaoCriaCliente()
+        {
+            var conversa = ConversaAguardandoFoto();
+            _twilioMidiaServiceMock.Setup(m => m.BaixarAsync(UrlFoto, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new MidiaBaixada { Conteudo = Array.Empty<byte>(), ContentType = "image/jpeg" });
+
+            await Enviar(conversa.CON_TELEFONE, "", Foto());
+
+            conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoFotoFachada);
+            _clienteServiceMock.Verify(s => s.CreateClienteComFotoAsync(It.IsAny<Cliente>(), It.IsAny<FotoCliente>()), Times.Never);
+            _conversaRepositoryMock.Verify(r => r.Atualizar(It.IsAny<Conversa>()), Times.Never);
+            _twilioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, "Não consegui receber a foto, envie novamente."), Times.Once);
+        }
+
+        [Fact]
+        public async Task ProcessarMensagem_FotoComClienteJaCriadoPorCpf_VinculaSemBaixarNemCriar()
+        {
+            var conversa = ConversaAguardandoFoto();
+            _clienteServiceMock.Setup(s => s.BuscaPorCpf("12345678900"))
+                .ReturnsAsync(new Cliente { CLI_CODIGO = 77, CLI_NOME = "Fulano" });
+
+            await Enviar(conversa.CON_TELEFONE, "", Foto());
+
+            conversa.CON_CLICODIGO.Should().Be(77);
+            conversa.CON_ETAPA.Should().Be(EtapaConversa.MenuCliente);
+            _conversaRepositoryMock.Verify(r => r.Atualizar(conversa), Times.Once);
+            _twilioMidiaServiceMock.Verify(m => m.BaixarAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            _clienteServiceMock.Verify(s => s.CreateClienteComFotoAsync(It.IsAny<Cliente>(), It.IsAny<FotoCliente>()), Times.Never);
+            _twilioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, "Cadastro realizado!\n\n1 - Novo Pedido\n2 - Acompanhar Pedido"), Times.Once);
+        }
+
+        [Fact]
+        public async Task ProcessarMensagem_FotoContentTypeMaiusculo_Aceita()
+        {
+            var conversa = ConversaAguardandoFoto();
+            _twilioMidiaServiceMock.Setup(m => m.BaixarAsync(UrlFoto, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new MidiaBaixada { Conteudo = new byte[] { 1 }, ContentType = "image/jpeg" });
+            _clienteServiceMock.Setup(s => s.CreateClienteComFotoAsync(It.IsAny<Cliente>(), It.IsAny<FotoCliente>()))
+                .ReturnsAsync(42);
+
+            await Enviar(conversa.CON_TELEFONE, "", Foto("IMAGE/JPEG"));
+
+            conversa.CON_CLICODIGO.Should().Be(42);
+            conversa.CON_ETAPA.Should().Be(EtapaConversa.MenuCliente);
+        }
+
+        [Fact]
+        public async Task ProcessarMensagem_FotoMuitoGrande_AvisaENaoCriaCliente()
+        {
+            var conversa = ConversaAguardandoFoto();
+            _twilioMidiaServiceMock.Setup(m => m.BaixarAsync(UrlFoto, It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new MidiaMuitoGrandeException(TwilioMidiaService.TamanhoMaximoBytes));
+
+            await Enviar(conversa.CON_TELEFONE, "", Foto());
+
+            conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoFotoFachada);
+            _clienteServiceMock.Verify(s => s.CreateClienteComFotoAsync(It.IsAny<Cliente>(), It.IsAny<FotoCliente>()), Times.Never);
+            _conversaRepositoryMock.Verify(r => r.Atualizar(It.IsAny<Conversa>()), Times.Never);
+            _twilioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, "Foto muito grande, envie outra."), Times.Once);
+        }
+
+        [Fact]
+        public async Task ProcessarMensagem_FotoCriacaoClienteFalha_AvisaEMantemEtapa()
+        {
+            var conversa = ConversaAguardandoFoto();
+            _twilioMidiaServiceMock.Setup(m => m.BaixarAsync(UrlFoto, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new MidiaBaixada { Conteudo = new byte[] { 1 }, ContentType = "image/jpeg" });
+            _clienteServiceMock.Setup(s => s.CreateClienteComFotoAsync(It.IsAny<Cliente>(), It.IsAny<FotoCliente>()))
+                .ThrowsAsync(new InvalidOperationException("db fora"));
+
+            await Enviar(conversa.CON_TELEFONE, "", Foto());
+
+            conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoFotoFachada);
+            conversa.CON_CLICODIGO.Should().BeNull();
+            _conversaRepositoryMock.Verify(r => r.Atualizar(It.IsAny<Conversa>()), Times.Never);
+            _twilioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, "Erro ao finalizar cadastro, envie a foto novamente."), Times.Once);
+        }
+
+        [Fact]
+        public async Task ProcessarMensagem_FotoValida_CriaClienteComFotoEVaiParaMenu()
+        {
+            var conversa = ConversaAguardandoFoto();
+            var bytes = new byte[] { 1, 2, 3 };
+            _twilioMidiaServiceMock.Setup(m => m.BaixarAsync(UrlFoto, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new MidiaBaixada { Conteudo = bytes, ContentType = "image/jpeg" });
+            _clienteServiceMock.Setup(s => s.CreateClienteComFotoAsync(It.IsAny<Cliente>(), It.IsAny<FotoCliente>()))
+                .ReturnsAsync(42);
+
+            await Enviar(conversa.CON_TELEFONE, "", Foto("image/png"));
+
+            _clienteServiceMock.Verify(s => s.CreateClienteComFotoAsync(
+                It.Is<Cliente>(c =>
+                    c.CLI_NOME == "Fulano" &&
+                    c.CLI_EMAIL == "fulano@teste.com" &&
+                    c.CLI_CPFCNPJ == "12345678900" &&
+                    c.CLI_TELEFONE == "11999999999"),
+                It.Is<FotoCliente>(f =>
+                    f.FOT_CONTEUDO == bytes &&
+                    f.FOT_CONTENT_TYPE == "image/png" &&
+                    f.FOT_TAMANHO == 3)), Times.Once);
+            conversa.CON_CLICODIGO.Should().Be(42);
+            conversa.CON_ETAPA.Should().Be(EtapaConversa.MenuCliente);
+            _conversaRepositoryMock.Verify(r => r.Atualizar(conversa), Times.Once);
+            _twilioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, It.Is<string>(m => m.StartsWith("Cadastro realizado!"))), Times.Once);
         }
 
         [Fact]
@@ -247,33 +454,38 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             var telefone = "11988887777";
 
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(telefone)).ReturnsAsync((Conversa?)null);
-            await _sut.ProcessarMensagem(telefone, "oi");
+            await Enviar(telefone, "oi");
             var conversa = new Conversa { CON_TELEFONE = telefone, CON_ETAPA = EtapaConversa.AguardandoCpf };
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(telefone)).ReturnsAsync(conversa);
 
             _clienteServiceMock.Setup(s => s.BuscaPorCpf("12345678900")).ReturnsAsync((Cliente?)null);
             _clienteRepositoryMock.Setup(r => r.GetByTelefoneAsync(It.IsAny<string>())).ReturnsAsync((Cliente?)null);
-            await _sut.ProcessarMensagem(telefone, "12345678900");
+            await Enviar(telefone, "12345678900");
             conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoNome);
 
-            await _sut.ProcessarMensagem(telefone, "Fulano de Tal");
+            await Enviar(telefone, "Fulano de Tal");
             conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoEmail);
 
-            _clienteServiceMock.Setup(s => s.CreateClienteAsync(It.IsAny<Cliente>())).ReturnsAsync(42);
-            await _sut.ProcessarMensagem(telefone, "fulano@teste.com");
+            await Enviar(telefone, "fulano@teste.com");
+            conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoFotoFachada);
+
+            _twilioMidiaServiceMock.Setup(m => m.BaixarAsync(UrlFoto, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new MidiaBaixada { Conteudo = new byte[] { 1 }, ContentType = "image/jpeg" });
+            _clienteServiceMock.Setup(s => s.CreateClienteComFotoAsync(It.IsAny<Cliente>(), It.IsAny<FotoCliente>())).ReturnsAsync(42);
+            await Enviar(telefone, "", Foto());
             conversa.CON_ETAPA.Should().Be(EtapaConversa.MenuCliente);
             conversa.CON_CLICODIGO.Should().Be(42);
 
-            await _sut.ProcessarMensagem(telefone, "1");
+            await Enviar(telefone, "1");
             conversa.CON_ETAPA.Should().Be(EtapaConversa.NovoPedido);
 
             _pedidoServiceMock.Setup(s => s.ValidarLinhaItem("2x pizza"))
                 .Returns(new ItemPedidoValidacao { Resultado = ItemPedidoValidacaoResultado.Valido, LinhaNormalizada = "2X PIZZA" });
-            await _sut.ProcessarMensagem(telefone, "2x pizza");
+            await Enviar(telefone, "2x pizza");
             conversa.CON_ULTIMA_MENSAGEM.Should().Be("2x pizza");
 
             _pedidoServiceMock.Setup(s => s.CreatePedidoAsync(It.IsAny<Pedido>())).ReturnsAsync(777);
-            await _sut.ProcessarMensagem(telefone, "terminar");
+            await Enviar(telefone, "terminar");
             conversa.CON_ETAPA.Should().Be(EtapaConversa.MenuCliente);
             conversa.CON_ULTIMA_MENSAGEM.Should().BeNullOrEmpty();
             _twilioServiceMock.Verify(t => t.EnviarMensagem(telefone, It.Is<string>(m => m.Contains("777"))), Times.Once);

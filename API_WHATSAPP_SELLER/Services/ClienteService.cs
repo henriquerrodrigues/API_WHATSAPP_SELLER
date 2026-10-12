@@ -23,6 +23,23 @@ namespace API_WHATSAPP_SELLER.Services
             return await _clienteRepository.CreateClienteAsync(newCliente);
         }
 
+        public async Task<int> CreateClienteComFotoAsync(Cliente newCliente, FotoCliente foto)
+        {
+            if (newCliente == null)
+                throw new ArgumentNullException(nameof(newCliente));
+
+            if (foto == null)
+                throw new ArgumentNullException(nameof(foto));
+
+            if (foto.FOT_CONTEUDO == null || foto.FOT_CONTEUDO.Length == 0)
+                throw new ArgumentException("A foto não pode estar vazia.", nameof(foto));
+
+            if (string.IsNullOrWhiteSpace(foto.FOT_CONTENT_TYPE))
+                throw new ArgumentException("O content-type da foto é obrigatório.", nameof(foto));
+
+            return await _clienteRepository.CreateClienteComFotoAsync(newCliente, foto);
+        }
+
         public async Task<List<Cliente>> GetClientesAsync()
         {
             return await _clienteRepository.GetClientesAsync();

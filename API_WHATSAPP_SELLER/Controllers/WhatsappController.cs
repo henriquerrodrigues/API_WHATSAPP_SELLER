@@ -23,12 +23,32 @@ public class WhatsappController : ControllerBase
     [HttpPost("webhook")]
     public async Task<IActionResult> ReceberMensagem()
     {
-        var telefone = Request.Form["From"].ToString();
-        var mensagem = Request.Form["Body"].ToString();
+        var form = Request.Form;
 
-        await _botservice.ProcessarMensagem(telefone, mensagem);
+        var mensagem = new MensagemRecebida
+        {
+            Telefone = form["From"].ToString(),
+            Texto = form["Body"].ToString(),
+            Midia = LerPrimeiraMidia(form)
+        };
+
+        await _botservice.ProcessarMensagem(mensagem);
 
         return Ok();
+    }
+
+    // Twilio manda NumMedia + MediaUrl{N}/MediaContentType{N}; só a primeira
+    // mídia interessa ao bot.
+    private static MidiaRecebida? LerPrimeiraMidia(IFormCollection form)
+    {
+        if (!int.TryParse(form["NumMedia"].ToString(), out var numMedia) || numMedia <= 0)
+            return null;
+
+        return new MidiaRecebida
+        {
+            Url = form["MediaUrl0"].ToString(),
+            ContentType = form["MediaContentType0"].ToString()
+        };
     }
 
     [HttpPost("enviar")]

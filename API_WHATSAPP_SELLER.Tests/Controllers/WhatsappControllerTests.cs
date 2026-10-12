@@ -1,0 +1,93 @@
+using API_WHATSAPP_SELLER.Controllers;
+using API_WHATSAPP_SELLER.Interfaces;
+using API_WHATSAPP_SELLER.Models;
+using FluentAssertions;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Primitives;
+using Moq;
+using Xunit;
+
+namespace API_WHATSAPP_SELLER.Tests.Controllers
+{
+    public class WhatsappControllerTests
+    {
+        private readonly Mock<IBotService> _botServiceMock = new();
+        private readonly Mock<ITwilioService> _twilioServiceMock = new();
+        private MensagemRecebida? _recebida;
+
+        public WhatsappControllerTests()
+        {
+            _botServiceMock
+                .Setup(b => b.ProcessarMensagem(It.IsAny<MensagemRecebida>()))
+                .Callback<MensagemRecebida>(m => _recebida = m)
+                .Returns(Task.CompletedTask);
+        }
+
+        private async Task ReceberComForm(Dictionary<string, StringValues> campos)
+        {
+            var httpContext = new DefaultHttpContext();
+            httpContext.Request.ContentType = "application/x-www-form-urlencoded";
+            httpContext.Request.Form = new FormCollection(campos);
+
+            var controller = new WhatsappController(_botServiceMock.Object, _twilioServiceMock.Object)
+            {
+                ControllerContext = new ControllerContext { HttpContext = httpContext }
+            };
+
+            await controller.ReceberMensagem();
+        }
+
+        [Fact]
+        public async Task ReceberMensagem_NumMediaZero_MidiaNula()
+        {
+            await ReceberComForm(new()
+            {
+                ["From"] = "whatsapp:+5511999999999",
+                ["Body"] = "oi",
+                ["NumMedia"] = "0"
+            });
+
+            _recebida!.Telefone.Should().Be("whatsapp:+5511999999999");
+            _recebida.Texto.Should().Be("oi");
+            _recebida.Midia.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task ReceberMensagem_NumMediaUm_PreencheMidiaComPrimeiraMidia()
+        {
+            await ReceberComForm(new()
+            {
+                ["From"] = "whatsapp:+5511999999999",
+                ["Body"] = "",
+                ["NumMedia"] = "1",
+                ["MediaUrl0"] = "https://api.twilio.com/media/ME1",
+                ["MediaContentType0"] = "image/jpeg"
+            });
+
+            _recebida!.Midia.Should().NotBeNull();
+            _recebida.Midia!.Url.Should().Be("https://api.twilio.com/media/ME1");
+            _recebida.Midia.ContentType.Should().Be("image/jpeg");
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("abc")]
+        public async Task ReceberMensagem_NumMediaAusenteOuInvalido_MidiaNula(string? numMedia)
+        {
+            var campos = new Dictionary<string, StringValues>
+            {
+                ["From"] = "whatsapp:+5511999999999",
+                ["Body"] = "oi",
+                ["MediaUrl0"] = "https://api.twilio.com/media/ME1",
+                ["MediaContentType0"] = "image/jpeg"
+            };
+            if (numMedia != null)
+                campos["NumMedia"] = numMedia;
+
+            await ReceberComForm(campos);
+
+            _recebida!.Midia.Should().BeNull();
+        }
+    }
+}
