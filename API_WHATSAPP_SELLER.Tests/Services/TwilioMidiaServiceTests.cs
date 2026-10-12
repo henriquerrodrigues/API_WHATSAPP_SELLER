@@ -1,0 +1,129 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Text;
+using API_WHATSAPP_SELLER.Exceptions;
+using API_WHATSAPP_SELLER.Models;
+using API_WHATSAPP_SELLER.Services;
+using FluentAssertions;
+using Microsoft.Extensions.Options;
+using Xunit;
+
+namespace API_WHATSAPP_SELLER.Tests.Services
+{
+    public class TwilioMidiaServiceTests
+    {
+        private const string Url = "https://api.twilio.com/2010-04-01/Accounts/AC123/Messages/MM1/Media/ME1";
+        private const int Limite = 5 * 1024 * 1024;
+
+        private static TwilioMidiaService CriarSut(FakeHandler handler)
+        {
+            var settings = Options.Create(new TwilioSettings { AccountSid = "AC123", AuthToken = "segredo" });
+            return new TwilioMidiaService(new HttpClient(handler), settings);
+        }
+
+        private static HttpResponseMessage RespostaImagem(byte[] conteudo, string contentType = "image/jpeg")
+        {
+            var content = new ByteArrayContent(conteudo);
+            content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
+        }
+
+        [Fact]
+        public async Task BaixarAsync_EnviaBasicAuthComAccountSidEAuthToken()
+        {
+            var handler = new FakeHandler(_ => RespostaImagem(new byte[] { 1 }));
+
+            await CriarSut(handler).BaixarAsync(Url);
+
+            var esperado = Convert.ToBase64String(Encoding.ASCII.GetBytes("AC123:segredo"));
+            handler.Requisicao!.Headers.Authorization!.Scheme.Should().Be("Basic");
+            handler.Requisicao.Headers.Authorization.Parameter.Should().Be(esperado);
+            handler.Requisicao.RequestUri!.ToString().Should().Be(Url);
+        }
+
+        [Fact]
+        public async Task BaixarAsync_200_RetornaBytesEContentType()
+        {
+            var bytes = new byte[] { 1, 2, 3 };
+            var handler = new FakeHandler(_ => RespostaImagem(bytes, "image/png"));
+
+            var midia = await CriarSut(handler).BaixarAsync(Url);
+
+            midia.Conteudo.Should().Equal(bytes);
+            midia.ContentType.Should().Be("image/png");
+        }
+
+        [Fact]
+        public async Task BaixarAsync_ExatamenteNoLimite_Aceita()
+        {
+            var handler = new FakeHandler(_ => RespostaImagem(new byte[Limite]));
+
+            var midia = await CriarSut(handler).BaixarAsync(Url);
+
+            midia.Conteudo.Length.Should().Be(Limite);
+        }
+
+        [Fact]
+        public async Task BaixarAsync_ContentLengthAcimaDoLimite_LancaMidiaMuitoGrande()
+        {
+            var handler = new FakeHandler(_ => RespostaImagem(new byte[Limite + 1]));
+
+            var act = () => CriarSut(handler).BaixarAsync(Url);
+
+            await act.Should().ThrowAsync<MidiaMuitoGrandeException>();
+        }
+
+        [Fact]
+        public async Task BaixarAsync_SemContentLengthPassandoDoLimite_LancaMidiaMuitoGrande()
+        {
+            var handler = new FakeHandler(_ =>
+            {
+                // StreamContent sobre stream não-buscável não informa Content-Length,
+                // forçando o caminho de leitura incremental.
+                var content = new StreamContent(new StreamNaoBuscavel(new byte[Limite + 1]));
+                content.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
+            });
+
+            var act = () => CriarSut(handler).BaixarAsync(Url);
+
+            await act.Should().ThrowAsync<MidiaMuitoGrandeException>();
+        }
+
+        [Theory]
+        [InlineData(HttpStatusCode.NotFound)]
+        [InlineData(HttpStatusCode.InternalServerError)]
+        public async Task BaixarAsync_StatusNaoSucesso_LancaHttpRequestException(HttpStatusCode status)
+        {
+            var handler = new FakeHandler(_ => new HttpResponseMessage(status));
+
+            var act = () => CriarSut(handler).BaixarAsync(Url);
+
+            await act.Should().ThrowAsync<HttpRequestException>();
+        }
+
+        private sealed class FakeHandler : HttpMessageHandler
+        {
+            private readonly Func<HttpRequestMessage, HttpResponseMessage> _responder;
+
+            public FakeHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)
+            {
+                _responder = responder;
+            }
+
+            public HttpRequestMessage? Requisicao { get; private set; }
+
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            {
+                Requisicao = request;
+                return Task.FromResult(_responder(request));
+            }
+        }
+
+        private sealed class StreamNaoBuscavel : MemoryStream
+        {
+            public StreamNaoBuscavel(byte[] buffer) : base(buffer) { }
+            public override bool CanSeek => false;
+        }
+    }
+}
