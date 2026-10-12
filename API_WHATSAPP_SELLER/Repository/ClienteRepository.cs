@@ -11,19 +11,7 @@ namespace API_WHATSAPP_SELLER.Repository
 
         private readonly IConfiguration _configuration;
 
-        public ClienteRepository(IConfiguration configuration)
-        {
-            _configuration = configuration;
-        }
-
-        public IDbConnection Connection()
-        {
-            return new MySqlConnection(_configuration.GetConnectionString("WppSellerDB"));
-        }
-
-        public async Task<int> CreateClienteAsync(Cliente newCliente)
-        {
-            const string sql = @"
+        private const string InsertClienteSql = @"
                 INSERT INTO tb_cliente
                 (
                     CLI_NOME,
@@ -46,11 +34,68 @@ namespace API_WHATSAPP_SELLER.Repository
                 SELECT LAST_INSERT_ID();
             ";
 
+        private const string InsertFotoSql = @"
+                INSERT INTO tb_cliente_foto
+                (
+                    FOT_CLICODIGO,
+                    FOT_CONTEUDO,
+                    FOT_CONTENT_TYPE,
+                    FOT_TAMANHO,
+                    FOT_CREATED_AT
+                )
+                VALUES
+                (
+                    @FOT_CLICODIGO,
+                    @FOT_CONTEUDO,
+                    @FOT_CONTENT_TYPE,
+                    @FOT_TAMANHO,
+                    @FOT_CREATED_AT
+                );
+            ";
+
+        public ClienteRepository(IConfiguration configuration)
+        {
+            _configuration = configuration;
+        }
+
+        public IDbConnection Connection()
+        {
+            return new MySqlConnection(_configuration.GetConnectionString("WppSellerDB"));
+        }
+
+        public async Task<int> CreateClienteAsync(Cliente newCliente)
+        {
             using var conn = Connection();
 
-            var id = await conn.ExecuteScalarAsync<int>(sql, newCliente);
+            var id = await conn.ExecuteScalarAsync<int>(InsertClienteSql, newCliente);
 
             return id;
+        }
+
+        // Cliente e foto entram juntos ou nenhum entra: sem foto não existe
+        // cadastro novo pelo bot, e cliente sem foto gravado deixaria a
+        // conversa presa pedindo a foto de alguém que já existe.
+        public async Task<int> CreateClienteComFotoAsync(Cliente newCliente, FotoCliente foto)
+        {
+            await using var conn = new MySqlConnection(_configuration.GetConnectionString("WppSellerDB"));
+            await conn.OpenAsync();
+            await using var tx = await conn.BeginTransactionAsync();
+
+            try
+            {
+                var id = await conn.ExecuteScalarAsync<int>(InsertClienteSql, newCliente, tx);
+
+                foto.FOT_CLICODIGO = id;
+                await conn.ExecuteAsync(InsertFotoSql, foto, tx);
+
+                await tx.CommitAsync();
+                return id;
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
+            }
         }
 
         public async Task<List<Cliente>> GetClientesAsync()

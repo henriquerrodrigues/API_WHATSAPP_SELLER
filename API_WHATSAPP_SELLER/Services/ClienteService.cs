@@ -23,6 +23,17 @@ namespace API_WHATSAPP_SELLER.Services
             return await _clienteRepository.CreateClienteAsync(newCliente);
         }
 
+        public async Task<int> CreateClienteComFotoAsync(Cliente newCliente, FotoCliente foto)
+        {
+            if (newCliente == null)
+                throw new ArgumentNullException(nameof(newCliente));
+
+            if (foto == null)
+                throw new ArgumentNullException(nameof(foto));
+
+            return await _clienteRepository.CreateClienteComFotoAsync(newCliente, foto);
+        }
+
         public async Task<List<Cliente>> GetClientesAsync()
         {
             return await _clienteRepository.GetClientesAsync();
