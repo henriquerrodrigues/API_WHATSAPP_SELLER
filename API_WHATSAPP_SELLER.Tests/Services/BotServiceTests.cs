@@ -337,7 +337,55 @@ namespace API_WHATSAPP_SELLER.Tests.Services
 
             conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoFotoFachada);
             _clienteServiceMock.Verify(s => s.CreateClienteComFotoAsync(It.IsAny<Cliente>(), It.IsAny<FotoCliente>()), Times.Never);
+            _conversaRepositoryMock.Verify(r => r.Atualizar(It.IsAny<Conversa>()), Times.Never);
             _twilioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, "Não consegui receber a foto, envie novamente."), Times.Once);
+        }
+
+        [Fact]
+        public async Task ProcessarMensagem_FotoDownloadVazio_PedeReenvioENaoCriaCliente()
+        {
+            var conversa = ConversaAguardandoFoto();
+            _twilioMidiaServiceMock.Setup(m => m.BaixarAsync(UrlFoto, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new MidiaBaixada { Conteudo = Array.Empty<byte>(), ContentType = "image/jpeg" });
+
+            await Enviar(conversa.CON_TELEFONE, "", Foto());
+
+            conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoFotoFachada);
+            _clienteServiceMock.Verify(s => s.CreateClienteComFotoAsync(It.IsAny<Cliente>(), It.IsAny<FotoCliente>()), Times.Never);
+            _conversaRepositoryMock.Verify(r => r.Atualizar(It.IsAny<Conversa>()), Times.Never);
+            _twilioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, "Não consegui receber a foto, envie novamente."), Times.Once);
+        }
+
+        [Fact]
+        public async Task ProcessarMensagem_FotoComClienteJaCriadoPorCpf_VinculaSemBaixarNemCriar()
+        {
+            var conversa = ConversaAguardandoFoto();
+            _clienteServiceMock.Setup(s => s.BuscaPorCpf("12345678900"))
+                .ReturnsAsync(new Cliente { CLI_CODIGO = 77, CLI_NOME = "Fulano" });
+
+            await Enviar(conversa.CON_TELEFONE, "", Foto());
+
+            conversa.CON_CLICODIGO.Should().Be(77);
+            conversa.CON_ETAPA.Should().Be(EtapaConversa.MenuCliente);
+            _conversaRepositoryMock.Verify(r => r.Atualizar(conversa), Times.Once);
+            _twilioMidiaServiceMock.Verify(m => m.BaixarAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            _clienteServiceMock.Verify(s => s.CreateClienteComFotoAsync(It.IsAny<Cliente>(), It.IsAny<FotoCliente>()), Times.Never);
+            _twilioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, "Cadastro realizado!\n\n1 - Novo Pedido\n2 - Acompanhar Pedido"), Times.Once);
+        }
+
+        [Fact]
+        public async Task ProcessarMensagem_FotoContentTypeMaiusculo_Aceita()
+        {
+            var conversa = ConversaAguardandoFoto();
+            _twilioMidiaServiceMock.Setup(m => m.BaixarAsync(UrlFoto, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new MidiaBaixada { Conteudo = new byte[] { 1 }, ContentType = "image/jpeg" });
+            _clienteServiceMock.Setup(s => s.CreateClienteComFotoAsync(It.IsAny<Cliente>(), It.IsAny<FotoCliente>()))
+                .ReturnsAsync(42);
+
+            await Enviar(conversa.CON_TELEFONE, "", Foto("IMAGE/JPEG"));
+
+            conversa.CON_CLICODIGO.Should().Be(42);
+            conversa.CON_ETAPA.Should().Be(EtapaConversa.MenuCliente);
         }
 
         [Fact]
@@ -351,6 +399,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
 
             conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoFotoFachada);
             _clienteServiceMock.Verify(s => s.CreateClienteComFotoAsync(It.IsAny<Cliente>(), It.IsAny<FotoCliente>()), Times.Never);
+            _conversaRepositoryMock.Verify(r => r.Atualizar(It.IsAny<Conversa>()), Times.Never);
             _twilioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, "Foto muito grande, envie outra."), Times.Once);
         }
 

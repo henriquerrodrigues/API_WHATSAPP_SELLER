@@ -185,6 +185,25 @@ namespace API_WHATSAPP_SELLER.Services
         // AguardandoFotoFachada (sem Atualizar) e o cliente reenvia.
         private async Task ProcessarFotoFachada(Conversa conversa, MidiaRecebida? midia)
         {
+            // Cliente já gravado numa tentativa anterior cujo Atualizar da conversa
+            // falhou: só vincula, pra não duplicar o cadastro. Envio simultâneo de
+            // várias fotos ainda pode duplicar — só UNIQUE em CLI_CPFCNPJ resolve.
+            var existente = await _clienteService.BuscaPorCpf(conversa.CON_CPF!);
+            if (existente != null)
+            {
+                conversa.CON_CLICODIGO = existente.CLI_CODIGO;
+                conversa.CON_ETAPA = EtapaConversa.MenuCliente;
+
+                await _conversaRepository.Atualizar(conversa);
+
+                await _twilioService.EnviarMensagem(
+                    conversa.CON_TELEFONE,
+                    "Cadastro realizado!\n\n" +
+                    "1 - Novo Pedido\n" +
+                    "2 - Acompanhar Pedido");
+                return;
+            }
+
             if (midia == null || !TiposFotoAceitos.Contains(midia.ContentType))
             {
                 await _twilioService.EnviarMensagem(
@@ -217,6 +236,14 @@ namespace API_WHATSAPP_SELLER.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Falha ao baixar foto da fachada de {Telefone}", conversa.CON_TELEFONE);
+                await _twilioService.EnviarMensagem(
+                    conversa.CON_TELEFONE,
+                    "Não consegui receber a foto, envie novamente.");
+                return;
+            }
+
+            if (baixada.Conteudo.Length == 0)
+            {
                 await _twilioService.EnviarMensagem(
                     conversa.CON_TELEFONE,
                     "Não consegui receber a foto, envie novamente.");
