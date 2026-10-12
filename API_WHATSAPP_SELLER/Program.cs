@@ -30,7 +30,8 @@ builder.Services.Configure<TwilioSettings>(
     builder.Configuration.GetSection("Twilio")
 );
 
-// Timeout de 10 s: o webhook do Twilio desiste em 15 s.
+// Timeout de 10 s cobre só até os headers; o serviço limita o tempo total
+// do download (o webhook do Twilio desiste em 15 s).
 builder.Services.AddHttpClient<ITwilioMidiaService, TwilioMidiaService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(10);

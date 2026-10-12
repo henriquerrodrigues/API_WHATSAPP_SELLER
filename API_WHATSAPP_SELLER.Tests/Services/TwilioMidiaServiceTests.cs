@@ -66,7 +66,15 @@ namespace API_WHATSAPP_SELLER.Tests.Services
         [Fact]
         public async Task BaixarAsync_ContentLengthAcimaDoLimite_LancaMidiaMuitoGrande()
         {
-            var handler = new FakeHandler(_ => RespostaImagem(new byte[Limite + 1]));
+            var handler = new FakeHandler(_ =>
+            {
+                // Corpo minúsculo, mas Content-Length declarado acima do limite:
+                // só a checagem do header pode barrar.
+                var content = new ByteArrayContent(new byte[] { 1 });
+                content.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+                content.Headers.ContentLength = Limite + 1;
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
+            });
 
             var act = () => CriarSut(handler).BaixarAsync(Url);
 
@@ -100,6 +108,33 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             var act = () => CriarSut(handler).BaixarAsync(Url);
 
             await act.Should().ThrowAsync<HttpRequestException>();
+        }
+
+        [Theory]
+        [InlineData("https://evil.example/x")]
+        [InlineData("http://api.twilio.com/2010-04-01/x")]
+        [InlineData("https://api.twilio.com.evil.example/x")]
+        [InlineData("nao-e-url")]
+        public async Task BaixarAsync_UrlForaDoTwilio_LancaArgumentExceptionSemChamarRede(string url)
+        {
+            var handler = new FakeHandler(_ => RespostaImagem(new byte[] { 1 }));
+
+            var act = () => CriarSut(handler).BaixarAsync(url);
+
+            await act.Should().ThrowAsync<ArgumentException>();
+            handler.Requisicao.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task BaixarAsync_TokenJaCancelado_LancaOperationCanceled()
+        {
+            var handler = new FakeHandler(_ => RespostaImagem(new byte[] { 1 }));
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            var act = () => CriarSut(handler).BaixarAsync(Url, cts.Token);
+
+            await act.Should().ThrowAsync<OperationCanceledException>();
         }
 
         private sealed class FakeHandler : HttpMessageHandler
