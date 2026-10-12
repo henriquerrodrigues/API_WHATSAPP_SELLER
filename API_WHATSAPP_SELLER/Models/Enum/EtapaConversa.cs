@@ -8,7 +8,7 @@
         AguardandoTelefone = 4,
         MenuCliente = 5,
         NovoPedido = 6,
-        AcompanhandoPedido = 7
-
+        AcompanhandoPedido = 7,
+        AguardandoFotoFachada = 8
     }
 }

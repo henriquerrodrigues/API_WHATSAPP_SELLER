@@ -1,4 +1,5 @@
-﻿using API_WHATSAPP_SELLER.Interfaces;
+﻿using API_WHATSAPP_SELLER.Exceptions;
+using API_WHATSAPP_SELLER.Interfaces;
 using API_WHATSAPP_SELLER.Models;
 using API_WHATSAPP_SELLER.Models.Enum;
 using System.Linq;
@@ -7,24 +8,37 @@ namespace API_WHATSAPP_SELLER.Services
 {
     public class BotService : IBotService
     {
+        private static readonly HashSet<string> TiposFotoAceitos = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+        };
+
         private readonly ITwilioService _twilioService;
         private readonly IConversaRepository _conversaRepository;
         private readonly IClienteService _clienteService;
         private readonly IPedidoService _pedidoService;
         private readonly IClienteRepository _clienteRepository;
+        private readonly ITwilioMidiaService _twilioMidiaService;
+        private readonly ILogger<BotService> _logger;
 
         public BotService(
             ITwilioService twilioService,
             IConversaRepository conversaRepository,
             IClienteService clienteService,
             IPedidoService pedidoService,
-            IClienteRepository clienteRepository)
+            IClienteRepository clienteRepository,
+            ITwilioMidiaService twilioMidiaService,
+            ILogger<BotService> logger)
         {
             _twilioService = twilioService;
             _conversaRepository = conversaRepository;
             _clienteService = clienteService;
             _pedidoService = pedidoService;
             _clienteRepository = clienteRepository;
+            _twilioMidiaService = twilioMidiaService;
+            _logger = logger;
         }
 
         public async Task ProcessarMensagem(MensagemRecebida mensagem)
@@ -51,6 +65,10 @@ namespace API_WHATSAPP_SELLER.Services
 
                 case EtapaConversa.AguardandoEmail:
                     await ProcessarEmail(conversa, texto);
+                    break;
+
+                case EtapaConversa.AguardandoFotoFachada:
+                    await ProcessarFotoFachada(conversa, mensagem.Midia);
                     break;
 
                 case EtapaConversa.MenuCliente:
@@ -154,6 +172,56 @@ namespace API_WHATSAPP_SELLER.Services
             }
 
             conversa.CON_EMAIL = email;
+            conversa.CON_ETAPA = EtapaConversa.AguardandoFotoFachada;
+
+            await _conversaRepository.Atualizar(conversa);
+
+            await _twilioService.EnviarMensagem(
+                conversa.CON_TELEFONE,
+                "Envie uma foto da fachada do seu estabelecimento.");
+        }
+
+        // Foto é obrigatória: em qualquer falha a conversa fica em
+        // AguardandoFotoFachada (sem Atualizar) e o cliente reenvia.
+        private async Task ProcessarFotoFachada(Conversa conversa, MidiaRecebida? midia)
+        {
+            if (midia == null || !TiposFotoAceitos.Contains(midia.ContentType))
+            {
+                await _twilioService.EnviarMensagem(
+                    conversa.CON_TELEFONE,
+                    "Envie uma foto (JPG, PNG ou WEBP) da fachada do seu estabelecimento.");
+                return;
+            }
+
+            MidiaBaixada baixada;
+            try
+            {
+                baixada = await _twilioMidiaService.BaixarAsync(midia.Url);
+            }
+            catch (MidiaMuitoGrandeException)
+            {
+                await _twilioService.EnviarMensagem(
+                    conversa.CON_TELEFONE,
+                    "Foto muito grande, envie outra.");
+                return;
+            }
+            catch (ArgumentException)
+            {
+                // URL fora do Twilio só chega por webhook forjado; não loga a URL.
+                _logger.LogWarning("MediaUrl fora do Twilio recebida para {Telefone}", conversa.CON_TELEFONE);
+                await _twilioService.EnviarMensagem(
+                    conversa.CON_TELEFONE,
+                    "Não consegui receber a foto, envie novamente.");
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Falha ao baixar foto da fachada de {Telefone}", conversa.CON_TELEFONE);
+                await _twilioService.EnviarMensagem(
+                    conversa.CON_TELEFONE,
+                    "Não consegui receber a foto, envie novamente.");
+                return;
+            }
 
             // O telefone já é conhecido de forma confiável via CON_TELEFONE (o
             // "From" do Twilio, capturado desde a primeira mensagem) — pedir
@@ -169,7 +237,28 @@ namespace API_WHATSAPP_SELLER.Services
                 CLI_CPFCNPJ = conversa.CON_CPF
             };
 
-            var codigoCliente = await _clienteService.CreateClienteAsync(cliente);
+            // Content-type da mensagem do Twilio, já validado contra a lista aceita.
+            var foto = new FotoCliente
+            {
+                FOT_CONTEUDO = baixada.Conteudo,
+                FOT_CONTENT_TYPE = midia.ContentType,
+                FOT_TAMANHO = baixada.Conteudo.Length,
+                FOT_CREATED_AT = DateTime.Now
+            };
+
+            int codigoCliente;
+            try
+            {
+                codigoCliente = await _clienteService.CreateClienteComFotoAsync(cliente, foto);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Falha ao criar cliente com foto para {Telefone}", conversa.CON_TELEFONE);
+                await _twilioService.EnviarMensagem(
+                    conversa.CON_TELEFONE,
+                    "Erro ao finalizar cadastro, envie a foto novamente.");
+                return;
+            }
 
             conversa.CON_CLICODIGO = codigoCliente;
             conversa.CON_ETAPA = EtapaConversa.MenuCliente;
