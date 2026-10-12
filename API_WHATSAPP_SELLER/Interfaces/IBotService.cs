@@ -1,7 +1,9 @@
-﻿namespace API_WHATSAPP_SELLER.Interfaces
+﻿using API_WHATSAPP_SELLER.Models;
+
+namespace API_WHATSAPP_SELLER.Interfaces
 {
     public interface IBotService
     {
-        Task ProcessarMensagem(string telefone, string mensagem);
+        Task ProcessarMensagem(MensagemRecebida mensagem);
     }
 }

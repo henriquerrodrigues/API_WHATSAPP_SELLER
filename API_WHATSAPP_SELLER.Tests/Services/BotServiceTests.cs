@@ -49,12 +49,17 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             return new Conversa { CON_TELEFONE = telefone, CON_ETAPA = etapa };
         }
 
+        private Task Enviar(string telefone, string texto, MidiaRecebida? midia = null)
+        {
+            return _sut.ProcessarMensagem(new MensagemRecebida { Telefone = telefone, Texto = texto, Midia = midia });
+        }
+
         [Fact]
         public async Task ProcessarMensagem_TelefoneNovo_IniciaConversaAguardandoCpf()
         {
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone("11999999999")).ReturnsAsync((Conversa?)null);
 
-            await _sut.ProcessarMensagem("11999999999", "oi");
+            await Enviar("11999999999", "oi");
 
             _conversaRepositoryMock.Verify(r => r.Criar(It.Is<Conversa>(c => c.CON_ETAPA == EtapaConversa.AguardandoCpf)), Times.Once);
         }
@@ -67,7 +72,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             _clienteServiceMock.Setup(s => s.BuscaPorCpf("12345678900"))
                 .ReturnsAsync(new Cliente { CLI_CODIGO = 1, CLI_NOME = "Fulano", CLI_CPFCNPJ = "12345678900" });
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "12345678900");
+            await Enviar(conversa.CON_TELEFONE, "12345678900");
 
             conversa.CON_ETAPA.Should().Be(EtapaConversa.MenuCliente);
             _conversaRepositoryMock.Verify(r => r.Atualizar(It.Is<Conversa>(c => c.CON_ETAPA == EtapaConversa.MenuCliente)), Times.Once);
@@ -82,7 +87,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             _clienteRepositoryMock.Setup(r => r.GetByTelefoneAsync("11999999999"))
                 .ReturnsAsync(new Cliente { CLI_CODIGO = 5, CLI_NOME = "Ciclana", CLI_CPFCNPJ = "11122233344" });
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "98765432100");
+            await Enviar(conversa.CON_TELEFONE, "98765432100");
 
             conversa.CON_ETAPA.Should().Be(EtapaConversa.MenuCliente);
             conversa.CON_CPF.Should().Be("11122233344");
@@ -98,7 +103,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             _clienteServiceMock.Setup(s => s.BuscaPorCpf("98765432100")).ReturnsAsync((Cliente?)null);
             _clienteRepositoryMock.Setup(r => r.GetByTelefoneAsync(It.IsAny<string>())).ReturnsAsync((Cliente?)null);
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "98765432100");
+            await Enviar(conversa.CON_TELEFONE, "98765432100");
 
             conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoNome);
         }
@@ -109,7 +114,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             var conversa = NovaConversa(EtapaConversa.AguardandoCpf);
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "123");
+            await Enviar(conversa.CON_TELEFONE, "123");
 
             conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoCpf);
             _conversaRepositoryMock.Verify(r => r.Atualizar(It.IsAny<Conversa>()), Times.Never);
@@ -121,7 +126,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             var conversa = NovaConversa(EtapaConversa.AguardandoEmail);
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "emailinvalido");
+            await Enviar(conversa.CON_TELEFONE, "emailinvalido");
 
             conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoEmail);
             _clienteServiceMock.Verify(s => s.CreateClienteAsync(It.IsAny<Cliente>()), Times.Never);
@@ -136,7 +141,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             _pedidoServiceMock.Setup(s => s.ValidarLinhaItem("produto sem quantidade"))
                 .Returns(new ItemPedidoValidacao { Resultado = ItemPedidoValidacaoResultado.FormatoInvalido });
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "produto sem quantidade");
+            await Enviar(conversa.CON_TELEFONE, "produto sem quantidade");
 
             conversa.CON_ULTIMA_MENSAGEM.Should().BeNullOrEmpty();
             conversa.CON_ETAPA.Should().Be(EtapaConversa.NovoPedido);
@@ -151,7 +156,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             _pedidoServiceMock.Setup(s => s.ValidarLinhaItem("101x produto"))
                 .Returns(new ItemPedidoValidacao { Resultado = ItemPedidoValidacaoResultado.QuantidadeMuitoAlta });
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "101x produto");
+            await Enviar(conversa.CON_TELEFONE, "101x produto");
 
             conversa.CON_ULTIMA_MENSAGEM.Should().BeNullOrEmpty();
         }
@@ -164,7 +169,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             conversa.CON_ULTIMA_MENSAGEM = string.Empty;
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "terminar");
+            await Enviar(conversa.CON_TELEFONE, "terminar");
 
             _pedidoServiceMock.Verify(s => s.CreatePedidoAsync(It.IsAny<Pedido>()), Times.Never);
         }
@@ -176,7 +181,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             conversa.CON_CLICODIGO = null;
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "terminar");
+            await Enviar(conversa.CON_TELEFONE, "terminar");
 
             conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoCpf);
         }
@@ -187,7 +192,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             var conversa = NovaConversa(EtapaConversa.MenuCliente);
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "9");
+            await Enviar(conversa.CON_TELEFONE, "9");
 
             conversa.CON_ETAPA.Should().Be(EtapaConversa.MenuCliente);
             _conversaRepositoryMock.Verify(r => r.Atualizar(It.IsAny<Conversa>()), Times.Never);
@@ -200,7 +205,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
             _pedidoServiceMock.Setup(s => s.BuscarPorId(15)).ReturnsAsync(new Pedido { PED_CODIGO = "15", PED_STATUS = "Em preparo", PED_DATA_PEDIDO = DateTime.Now });
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "15");
+            await Enviar(conversa.CON_TELEFONE, "15");
 
             conversa.CON_ETAPA.Should().Be(EtapaConversa.MenuCliente);
             _twilioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, It.Is<string>(m => m.Contains("Em preparo"))), Times.Once);
@@ -213,7 +218,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
             _pedidoServiceMock.Setup(s => s.BuscarPorId(99)).ReturnsAsync((Pedido?)null);
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "99");
+            await Enviar(conversa.CON_TELEFONE, "99");
 
             _twilioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, It.Is<string>(m => m.Contains("Não encontramos"))), Times.Once);
         }
@@ -224,7 +229,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             var conversa = NovaConversa(EtapaConversa.AcompanhandoPedido);
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "0");
+            await Enviar(conversa.CON_TELEFONE, "0");
 
             conversa.CON_ETAPA.Should().Be(EtapaConversa.MenuCliente);
         }
@@ -235,7 +240,7 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             var conversa = NovaConversa(EtapaConversa.AcompanhandoPedido);
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
 
-            await _sut.ProcessarMensagem(conversa.CON_TELEFONE, "abc");
+            await Enviar(conversa.CON_TELEFONE, "abc");
 
             conversa.CON_ETAPA.Should().Be(EtapaConversa.AcompanhandoPedido);
             _pedidoServiceMock.Verify(s => s.BuscarPorId(It.IsAny<int>()), Times.Never);
@@ -247,33 +252,33 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             var telefone = "11988887777";
 
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(telefone)).ReturnsAsync((Conversa?)null);
-            await _sut.ProcessarMensagem(telefone, "oi");
+            await Enviar(telefone, "oi");
             var conversa = new Conversa { CON_TELEFONE = telefone, CON_ETAPA = EtapaConversa.AguardandoCpf };
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(telefone)).ReturnsAsync(conversa);
 
             _clienteServiceMock.Setup(s => s.BuscaPorCpf("12345678900")).ReturnsAsync((Cliente?)null);
             _clienteRepositoryMock.Setup(r => r.GetByTelefoneAsync(It.IsAny<string>())).ReturnsAsync((Cliente?)null);
-            await _sut.ProcessarMensagem(telefone, "12345678900");
+            await Enviar(telefone, "12345678900");
             conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoNome);
 
-            await _sut.ProcessarMensagem(telefone, "Fulano de Tal");
+            await Enviar(telefone, "Fulano de Tal");
             conversa.CON_ETAPA.Should().Be(EtapaConversa.AguardandoEmail);
 
             _clienteServiceMock.Setup(s => s.CreateClienteAsync(It.IsAny<Cliente>())).ReturnsAsync(42);
-            await _sut.ProcessarMensagem(telefone, "fulano@teste.com");
+            await Enviar(telefone, "fulano@teste.com");
             conversa.CON_ETAPA.Should().Be(EtapaConversa.MenuCliente);
             conversa.CON_CLICODIGO.Should().Be(42);
 
-            await _sut.ProcessarMensagem(telefone, "1");
+            await Enviar(telefone, "1");
             conversa.CON_ETAPA.Should().Be(EtapaConversa.NovoPedido);
 
             _pedidoServiceMock.Setup(s => s.ValidarLinhaItem("2x pizza"))
                 .Returns(new ItemPedidoValidacao { Resultado = ItemPedidoValidacaoResultado.Valido, LinhaNormalizada = "2X PIZZA" });
-            await _sut.ProcessarMensagem(telefone, "2x pizza");
+            await Enviar(telefone, "2x pizza");
             conversa.CON_ULTIMA_MENSAGEM.Should().Be("2x pizza");
 
             _pedidoServiceMock.Setup(s => s.CreatePedidoAsync(It.IsAny<Pedido>())).ReturnsAsync(777);
-            await _sut.ProcessarMensagem(telefone, "terminar");
+            await Enviar(telefone, "terminar");
             conversa.CON_ETAPA.Should().Be(EtapaConversa.MenuCliente);
             conversa.CON_ULTIMA_MENSAGEM.Should().BeNullOrEmpty();
             _twilioServiceMock.Verify(t => t.EnviarMensagem(telefone, It.Is<string>(m => m.Contains("777"))), Times.Once);

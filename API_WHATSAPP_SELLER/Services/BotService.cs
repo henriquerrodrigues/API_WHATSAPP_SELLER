@@ -27,40 +27,42 @@ namespace API_WHATSAPP_SELLER.Services
             _clienteRepository = clienteRepository;
         }
 
-        public async Task ProcessarMensagem(string telefone, string mensagem)
+        public async Task ProcessarMensagem(MensagemRecebida mensagem)
         {
-            var conversa = await _conversaRepository.BuscaPorTelefone(telefone);
+            var conversa = await _conversaRepository.BuscaPorTelefone(mensagem.Telefone);
 
             if (conversa == null)
             {
-                await IniciarConversa(telefone);
+                await IniciarConversa(mensagem.Telefone);
                 return;
             }
+
+            var texto = mensagem.Texto;
 
             switch (conversa.CON_ETAPA)
             {
                 case EtapaConversa.AguardandoCpf:
-                    await ProcessarCpf(conversa, mensagem);
+                    await ProcessarCpf(conversa, texto);
                     break;
 
                 case EtapaConversa.AguardandoNome:
-                    await ProcessarNome(conversa, mensagem);
+                    await ProcessarNome(conversa, texto);
                     break;
 
                 case EtapaConversa.AguardandoEmail:
-                    await ProcessarEmail(conversa, mensagem);
+                    await ProcessarEmail(conversa, texto);
                     break;
 
                 case EtapaConversa.MenuCliente:
-                    await ProcessarMenu(conversa, mensagem);
+                    await ProcessarMenu(conversa, texto);
                     break;
 
                 case EtapaConversa.NovoPedido:
-                    await ProcessarNovoPedido(conversa, mensagem);
+                    await ProcessarNovoPedido(conversa, texto);
                     break;
 
                 case EtapaConversa.AcompanhandoPedido:
-                    await ProcessarAcompanhamentoPedido(conversa, mensagem);
+                    await ProcessarAcompanhamentoPedido(conversa, texto);
                     break;
             }
         }
