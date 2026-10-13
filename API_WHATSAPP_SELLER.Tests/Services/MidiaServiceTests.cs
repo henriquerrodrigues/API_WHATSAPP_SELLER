@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using API_WHATSAPP_SELLER.Exceptions;
 using API_WHATSAPP_SELLER.Models;
+using API_WHATSAPP_SELLER.Models.Enum;
 using API_WHATSAPP_SELLER.Services;
 using FluentAssertions;
 using Microsoft.Extensions.Options;
@@ -10,15 +11,19 @@ using Xunit;
 
 namespace API_WHATSAPP_SELLER.Tests.Services
 {
-    public class TwilioMidiaServiceTests
+    public class MidiaServiceTests
     {
         private const string Url = "https://api.twilio.com/2010-04-01/Accounts/AC123/Messages/MM1/Media/ME1";
         private const int Limite = 5 * 1024 * 1024;
 
-        private static TwilioMidiaService CriarSut(FakeHandler handler)
+        private const string ApiUrlCentral = "https://central.example/v1/api/external/api-1";
+        private const string UrlCentral = "https://central.example/public/1700000000000.jpeg";
+
+        private static MidiaService CriarSut(FakeHandler handler, string apiUrlCentral = ApiUrlCentral)
         {
-            var settings = Options.Create(new TwilioSettings { AccountSid = "AC123", AuthToken = "segredo" });
-            return new TwilioMidiaService(new HttpClient(handler), settings);
+            var twilio = Options.Create(new TwilioSettings { AccountSid = "AC123", AuthToken = "segredo" });
+            var central = Options.Create(new CentralSettings { Canal = CanalEnvio.Central, ApiUrl = apiUrlCentral });
+            return new MidiaService(new HttpClient(handler), twilio, central);
         }
 
         private static HttpResponseMessage RespostaImagem(byte[] conteudo, string contentType = "image/jpeg")
@@ -115,7 +120,9 @@ namespace API_WHATSAPP_SELLER.Tests.Services
         [InlineData("http://api.twilio.com/2010-04-01/x")]
         [InlineData("https://api.twilio.com.evil.example/x")]
         [InlineData("nao-e-url")]
-        public async Task BaixarAsync_UrlForaDoTwilio_LancaArgumentExceptionSemChamarRede(string url)
+        [InlineData("http://central.example/public/x.jpeg")]
+        [InlineData("https://central.example.evil.example/public/x.jpeg")]
+        public async Task BaixarAsync_HostNaoPermitido_LancaArgumentExceptionSemChamarRede(string url)
         {
             var handler = new FakeHandler(_ => RespostaImagem(new byte[] { 1 }));
 
@@ -123,6 +130,40 @@ namespace API_WHATSAPP_SELLER.Tests.Services
 
             await act.Should().ThrowAsync<ArgumentException>();
             handler.Requisicao.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task BaixarAsync_HostDaCentral_BaixaSemAuthorization()
+        {
+            var bytes = new byte[] { 7, 8 };
+            var handler = new FakeHandler(_ => RespostaImagem(bytes));
+
+            var midia = await CriarSut(handler).BaixarAsync(UrlCentral);
+
+            midia.Conteudo.Should().Equal(bytes);
+            handler.Requisicao!.Headers.Authorization.Should().BeNull();
+            handler.Requisicao.RequestUri!.ToString().Should().Be(UrlCentral);
+        }
+
+        [Fact]
+        public async Task BaixarAsync_HostDaCentralSemApiUrlConfigurada_Rejeita()
+        {
+            var handler = new FakeHandler(_ => RespostaImagem(new byte[] { 1 }));
+
+            var act = () => CriarSut(handler, apiUrlCentral: "").BaixarAsync(UrlCentral);
+
+            await act.Should().ThrowAsync<ArgumentException>();
+            handler.Requisicao.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task BaixarAsync_HostDaCentralAcimaDoLimite_LancaMidiaMuitoGrande()
+        {
+            var handler = new FakeHandler(_ => RespostaImagem(new byte[Limite + 1]));
+
+            var act = () => CriarSut(handler).BaixarAsync(UrlCentral);
+
+            await act.Should().ThrowAsync<MidiaMuitoGrandeException>();
         }
 
         [Fact]

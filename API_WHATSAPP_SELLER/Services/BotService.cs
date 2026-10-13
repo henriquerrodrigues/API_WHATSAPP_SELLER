@@ -20,7 +20,7 @@ namespace API_WHATSAPP_SELLER.Services
         private readonly IClienteService _clienteService;
         private readonly IPedidoService _pedidoService;
         private readonly IClienteRepository _clienteRepository;
-        private readonly ITwilioMidiaService _twilioMidiaService;
+        private readonly IMidiaService _midiaService;
         private readonly ILogger<BotService> _logger;
 
         public BotService(
@@ -29,7 +29,7 @@ namespace API_WHATSAPP_SELLER.Services
             IClienteService clienteService,
             IPedidoService pedidoService,
             IClienteRepository clienteRepository,
-            ITwilioMidiaService twilioMidiaService,
+            IMidiaService midiaService,
             ILogger<BotService> logger)
         {
             _envioService = envioService;
@@ -37,7 +37,7 @@ namespace API_WHATSAPP_SELLER.Services
             _clienteService = clienteService;
             _pedidoService = pedidoService;
             _clienteRepository = clienteRepository;
-            _twilioMidiaService = twilioMidiaService;
+            _midiaService = midiaService;
             _logger = logger;
         }
 
@@ -229,7 +229,7 @@ namespace API_WHATSAPP_SELLER.Services
             MidiaBaixada baixada;
             try
             {
-                baixada = await _twilioMidiaService.BaixarAsync(midia.Url);
+                baixada = await _midiaService.BaixarAsync(midia.Url);
             }
             catch (MidiaMuitoGrandeException)
             {
@@ -240,8 +240,8 @@ namespace API_WHATSAPP_SELLER.Services
             }
             catch (ArgumentException)
             {
-                // URL fora do Twilio só chega por webhook forjado; não loga a URL.
-                _logger.LogWarning("MediaUrl fora do Twilio recebida para {Telefone}", conversa.CON_TELEFONE);
+                // Host fora do Twilio/central só chega por webhook forjado; não loga a URL.
+                _logger.LogWarning("MediaUrl de host não permitido recebida para {Telefone}", conversa.CON_TELEFONE);
                 await Responder(
                     conversa.CON_TELEFONE,
                     "Não consegui receber a foto, envie novamente.");
