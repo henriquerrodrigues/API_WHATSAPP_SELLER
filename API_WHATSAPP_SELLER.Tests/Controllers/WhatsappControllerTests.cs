@@ -1,10 +1,12 @@
 using API_WHATSAPP_SELLER.Controllers;
 using API_WHATSAPP_SELLER.Interfaces;
 using API_WHATSAPP_SELLER.Models;
+using API_WHATSAPP_SELLER.Models.Enum;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
 using Moq;
 using Xunit;
@@ -16,6 +18,7 @@ namespace API_WHATSAPP_SELLER.Tests.Controllers
         private readonly Mock<IBotService> _botServiceMock = new();
         private readonly Mock<IEnvioMensagemService> _envioServiceMock = new();
         private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
+        private readonly CentralSettings _central = new();
         private MensagemRecebida? _recebida;
 
         public WhatsappControllerTests()
@@ -32,7 +35,7 @@ namespace API_WHATSAPP_SELLER.Tests.Controllers
             httpContext.Request.ContentType = "application/x-www-form-urlencoded";
             httpContext.Request.Form = new FormCollection(campos);
 
-            return new WhatsappController(_botServiceMock.Object, _envioServiceMock.Object, _cache)
+            return new WhatsappController(_botServiceMock.Object, _envioServiceMock.Object, _cache, Options.Create(_central))
             {
                 ControllerContext = new ControllerContext { HttpContext = httpContext }
             };
@@ -150,6 +153,28 @@ namespace API_WHATSAPP_SELLER.Tests.Controllers
 
             segunda.Should().BeOfType<OkResult>();
             _botServiceMock.Verify(b => b.ProcessarMensagem(It.IsAny<MensagemRecebida>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task Resetar_CanalCentral_EncerraConversaERespondeOk()
+        {
+            _central.Canal = CanalEnvio.Central;
+
+            var resultado = await CriarController(new() { ["telefone"] = "whatsapp:+5511999999999" }).Resetar();
+
+            resultado.Should().BeOfType<OkResult>();
+            _botServiceMock.Verify(b => b.EncerrarConversa("whatsapp:+5511999999999"), Times.Once);
+        }
+
+        [Fact]
+        public async Task Resetar_CanalTwilio_404SemEncerrar()
+        {
+            _central.Canal = CanalEnvio.Twilio;
+
+            var resultado = await CriarController(new() { ["telefone"] = "whatsapp:+5511999999999" }).Resetar();
+
+            resultado.Should().BeOfType<NotFoundResult>();
+            _botServiceMock.Verify(b => b.EncerrarConversa(It.IsAny<string>()), Times.Never);
         }
     }
 }

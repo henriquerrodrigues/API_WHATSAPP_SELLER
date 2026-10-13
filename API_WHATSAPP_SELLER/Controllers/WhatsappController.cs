@@ -4,7 +4,9 @@ using Microsoft.IdentityModel.Tokens;
 using API_WHATSAPP_SELLER.Models;
 using API_WHATSAPP_SELLER.Interfaces;
 using API_WHATSAPP_SELLER.Filters;
+using API_WHATSAPP_SELLER.Models.Enum;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
 
 namespace API_WHATSAPP_SELLER.Controllers;
 
@@ -18,12 +20,18 @@ public class WhatsappController : ControllerBase
     private readonly IBotService _botservice;
     private readonly IEnvioMensagemService _envioService;
     private readonly IMemoryCache _cache;
+    private readonly CentralSettings _central;
 
-    public WhatsappController(IBotService botservice, IEnvioMensagemService envioService, IMemoryCache cache)
+    public WhatsappController(
+        IBotService botservice,
+        IEnvioMensagemService envioService,
+        IMemoryCache cache,
+        IOptions<CentralSettings> centralOptions)
     {
         _botservice = botservice;
         _envioService = envioService;
         _cache = cache;
+        _central = centralOptions.Value;
     }
 
     [HttpPost("webhook")]
@@ -52,6 +60,21 @@ public class WhatsappController : ControllerBase
         };
 
         await _botservice.ProcessarMensagem(mensagem);
+
+        return Ok();
+    }
+
+    // Central avisa que o ticket foi fechado. Idempotente: sempre 200.
+    [HttpPost("reset")]
+    [CentralSecret]
+    public async Task<IActionResult> Resetar()
+    {
+        if (_central.Canal != CanalEnvio.Central)
+            return NotFound();
+
+        var telefone = Request.Form["telefone"].ToString();
+        if (!string.IsNullOrWhiteSpace(telefone))
+            await _botservice.EncerrarConversa(telefone);
 
         return Ok();
     }

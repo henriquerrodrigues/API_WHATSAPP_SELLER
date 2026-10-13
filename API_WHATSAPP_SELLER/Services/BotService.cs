@@ -99,6 +99,18 @@ namespace API_WHATSAPP_SELLER.Services
             }
         }
 
+        // Ticket fechado na central. Só muda o status; a próxima mensagem do
+        // cliente reabre a conversa (ver ReabrirConversa).
+        public async Task EncerrarConversa(string telefone)
+        {
+            var conversa = await _conversaRepository.BuscaPorTelefone(telefone);
+            if (conversa == null || conversa.CON_STATUS == StatusConversa.Finalizada)
+                return;
+
+            conversa.CON_STATUS = StatusConversa.Finalizada;
+            await _conversaRepository.Atualizar(conversa);
+        }
+
         private async Task IniciarConversa(string telefone)
         {
             var conversa = new Conversa

@@ -505,5 +505,44 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             await act.Should().NotThrowAsync();
             _conversaRepositoryMock.Verify(r => r.Atualizar(It.Is<Conversa>(c => c.CON_ETAPA == EtapaConversa.AguardandoEmail)), Times.Once);
         }
+
+        [Fact]
+        public async Task EncerrarConversa_ConversaAtiva_MarcaFinalizadaSemMudarEtapa()
+        {
+            var conversa = NovaConversa(EtapaConversa.NovoPedido, telefone: "whatsapp:+5511999999999");
+            conversa.CON_CLICODIGO = 7;
+            _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
+
+            await _sut.EncerrarConversa(conversa.CON_TELEFONE);
+
+            _conversaRepositoryMock.Verify(r => r.Atualizar(It.Is<Conversa>(c =>
+                c.CON_STATUS == StatusConversa.Finalizada &&
+                c.CON_ETAPA == EtapaConversa.NovoPedido &&
+                c.CON_CLICODIGO == 7)), Times.Once);
+            _envioServiceMock.Verify(t => t.EnviarMensagem(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task EncerrarConversa_ConversaInexistente_NaoFazNada()
+        {
+            _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(It.IsAny<string>())).ReturnsAsync((Conversa?)null);
+
+            await _sut.EncerrarConversa("whatsapp:+5511999999999");
+
+            _conversaRepositoryMock.Verify(r => r.Atualizar(It.IsAny<Conversa>()), Times.Never);
+            _conversaRepositoryMock.Verify(r => r.Criar(It.IsAny<Conversa>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task EncerrarConversa_JaFinalizada_NaoGravaDeNovo()
+        {
+            var conversa = NovaConversa(EtapaConversa.MenuCliente);
+            conversa.CON_STATUS = StatusConversa.Finalizada;
+            _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
+
+            await _sut.EncerrarConversa(conversa.CON_TELEFONE);
+
+            _conversaRepositoryMock.Verify(r => r.Atualizar(It.IsAny<Conversa>()), Times.Never);
+        }
     }
 }
