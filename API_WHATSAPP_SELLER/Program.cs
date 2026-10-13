@@ -1,5 +1,6 @@
 using API_WHATSAPP_SELLER.Interfaces;
 using API_WHATSAPP_SELLER.Models;
+using API_WHATSAPP_SELLER.Models.Enum;
 using API_WHATSAPP_SELLER.Repository;
 using API_WHATSAPP_SELLER.Services;
 
@@ -25,10 +26,30 @@ builder.Services.AddScoped<IPedidoRepository, PedidoRepository>();
 builder.Services.AddScoped<IClienteService, ClienteService>();
 builder.Services.AddScoped<IPedidoService, PedidoService>();
 
-builder.Services.AddScoped<IEnvioMensagemService, TwilioService>();
 builder.Services.Configure<TwilioSettings>(
     builder.Configuration.GetSection("Twilio")
 );
+
+builder.Services.AddOptions<CentralSettings>()
+    .Bind(builder.Configuration.GetSection("Central"))
+    .Validate(s => s.EhValido(),
+        "Central__Canal=Central exige Central__ApiUrl (https), Central__ApiToken e Central__SharedSecret.")
+    .ValidateOnStart();
+
+// Central__Canal escolhe por onde o bot responde; Twilio continua como
+// rollback sem deploy.
+var central = builder.Configuration.GetSection("Central").Get<CentralSettings>() ?? new CentralSettings();
+if (central.Canal == CanalEnvio.Central)
+{
+    builder.Services.AddHttpClient<IEnvioMensagemService, CentralMensagemService>(client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(20);
+    });
+}
+else
+{
+    builder.Services.AddScoped<IEnvioMensagemService, TwilioService>();
+}
 
 // Timeout de 10 s cobre só até os headers; o serviço limita o tempo total
 // do download (o webhook do Twilio desiste em 15 s).
