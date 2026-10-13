@@ -11,13 +11,13 @@ namespace API_WHATSAPP_SELLER.Controllers;
 public class WhatsappController : ControllerBase
 {
     private readonly IBotService _botservice;
-    private readonly ITwilioService _twilioService;
+    private readonly IEnvioMensagemService _envioService;
 
 
-    public WhatsappController(IBotService botservice, ITwilioService twilioService)
+    public WhatsappController(IBotService botservice, IEnvioMensagemService envioService)
     {
         _botservice = botservice;
-        _twilioService = twilioService;
+        _envioService = envioService;
     }
 
     [HttpPost("webhook")]
@@ -59,7 +59,7 @@ public class WhatsappController : ControllerBase
             return BadRequest("Telefone e Mensagem são obrigatórios.");
         }
 
-        _twilioService.EnviarMensagem(request.Telefone, request.Mensagem);
+        _envioService.EnviarMensagem(request.Telefone, request.Mensagem);
         return Ok(new { status = "Mensagem enviada com sucesso" });
     }
 }

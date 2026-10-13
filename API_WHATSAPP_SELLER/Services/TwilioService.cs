@@ -7,7 +7,7 @@ using Twilio.Types;
 
 namespace API_WHATSAPP_SELLER.Services
 {
-    public class TwilioService : ITwilioService
+    public class TwilioService : IEnvioMensagemService
     {
         private readonly TwilioSettings _settings;
 

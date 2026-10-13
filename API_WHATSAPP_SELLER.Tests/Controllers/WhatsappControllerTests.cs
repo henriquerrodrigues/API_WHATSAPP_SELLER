@@ -13,7 +13,7 @@ namespace API_WHATSAPP_SELLER.Tests.Controllers
     public class WhatsappControllerTests
     {
         private readonly Mock<IBotService> _botServiceMock = new();
-        private readonly Mock<ITwilioService> _twilioServiceMock = new();
+        private readonly Mock<IEnvioMensagemService> _envioServiceMock = new();
         private MensagemRecebida? _recebida;
 
         public WhatsappControllerTests()
@@ -30,7 +30,7 @@ namespace API_WHATSAPP_SELLER.Tests.Controllers
             httpContext.Request.ContentType = "application/x-www-form-urlencoded";
             httpContext.Request.Form = new FormCollection(campos);
 
-            var controller = new WhatsappController(_botServiceMock.Object, _twilioServiceMock.Object)
+            var controller = new WhatsappController(_botServiceMock.Object, _envioServiceMock.Object)
             {
                 ControllerContext = new ControllerContext { HttpContext = httpContext }
             };

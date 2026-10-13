@@ -1,6 +1,6 @@
 ﻿namespace API_WHATSAPP_SELLER.Interfaces
 {
-    public interface ITwilioService
+    public interface IEnvioMensagemService
     {
         Task EnviarMensagem(string telefone, string mensagem);
     }
