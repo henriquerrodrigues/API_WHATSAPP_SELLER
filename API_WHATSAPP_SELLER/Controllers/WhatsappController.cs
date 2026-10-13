@@ -3,6 +3,7 @@ using API_WHATSAPP_SELLER.Services;
 using Microsoft.IdentityModel.Tokens;
 using API_WHATSAPP_SELLER.Models;
 using API_WHATSAPP_SELLER.Interfaces;
+using API_WHATSAPP_SELLER.Filters;
 
 namespace API_WHATSAPP_SELLER.Controllers;
 
@@ -21,6 +22,7 @@ public class WhatsappController : ControllerBase
     }
 
     [HttpPost("webhook")]
+    [CentralSecret]
     public async Task<IActionResult> ReceberMensagem()
     {
         var form = Request.Form;
