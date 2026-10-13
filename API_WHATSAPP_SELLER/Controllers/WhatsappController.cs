@@ -105,6 +105,7 @@ public class WhatsappController : ControllerBase
     }
 
     [HttpPost("enviar")]
+    [CentralSecret]
     public IActionResult EnviarMensagem([FromBody] MensagemRequestModel request)
     {
         if(string.IsNullOrEmpty(request.Telefone) || string.IsNullOrEmpty(request.Mensagem))
