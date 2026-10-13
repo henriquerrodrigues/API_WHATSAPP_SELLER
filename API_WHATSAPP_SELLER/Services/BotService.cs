@@ -41,6 +41,20 @@ namespace API_WHATSAPP_SELLER.Services
             _logger = logger;
         }
 
+        // Falha de envio não interrompe o fluxo: a conversa já foi gravada e o
+        // webhook precisa responder 200 para a central não repetir o repasse.
+        private async Task Responder(string telefone, string mensagem)
+        {
+            try
+            {
+                await _envioService.EnviarMensagem(telefone, mensagem);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Falha ao enviar mensagem para {Telefone}", telefone);
+            }
+        }
+
         public async Task ProcessarMensagem(MensagemRecebida mensagem)
         {
             var conversa = await _conversaRepository.BuscaPorTelefone(mensagem.Telefone);
@@ -95,7 +109,7 @@ namespace API_WHATSAPP_SELLER.Services
 
             await _conversaRepository.Criar(conversa);
 
-            await _envioService.EnviarMensagem(
+            await Responder(
                 telefone,
                 "Olá! Seja bem-vindo.\n\nInforme seu CPF ou CNPJ para continuarmos.");
         }
@@ -104,7 +118,7 @@ namespace API_WHATSAPP_SELLER.Services
         {
             if (!_clienteService.TryNormalizarCpfCnpj(cpf, out var cpfNormalizado))
             {
-                await _envioService.EnviarMensagem(
+                await Responder(
                     conversa.CON_TELEFONE,
                     "CPF/CNPJ inválido, digite novamente.");
                 return;
@@ -122,7 +136,7 @@ namespace API_WHATSAPP_SELLER.Services
 
                 await _conversaRepository.Atualizar(conversa);
 
-                await _envioService.EnviarMensagem(
+                await Responder(
                     conversa.CON_TELEFONE,
                     $"Olá {cliente.CLI_NOME}!\n\n" +
                     "1 - Novo Pedido\n" +
@@ -136,7 +150,7 @@ namespace API_WHATSAPP_SELLER.Services
 
             await _conversaRepository.Atualizar(conversa);
 
-            await _envioService.EnviarMensagem(
+            await Responder(
                 conversa.CON_TELEFONE,
                 "Não encontramos seu cadastro.\n\nQual seu nome?");
         }
@@ -145,7 +159,7 @@ namespace API_WHATSAPP_SELLER.Services
         {
             if (!_clienteService.NomeValido(nome))
             {
-                await _envioService.EnviarMensagem(
+                await Responder(
                     conversa.CON_TELEFONE,
                     "Nome inválido, digite novamente.");
                 return;
@@ -156,7 +170,7 @@ namespace API_WHATSAPP_SELLER.Services
 
             await _conversaRepository.Atualizar(conversa);
 
-            await _envioService.EnviarMensagem(
+            await Responder(
                 conversa.CON_TELEFONE,
                 "Informe seu e-mail.");
         }
@@ -165,7 +179,7 @@ namespace API_WHATSAPP_SELLER.Services
         {
             if (!_clienteService.EmailValido(email))
             {
-                await _envioService.EnviarMensagem(
+                await Responder(
                     conversa.CON_TELEFONE,
                     "E-mail inválido, digite novamente.");
                 return;
@@ -176,7 +190,7 @@ namespace API_WHATSAPP_SELLER.Services
 
             await _conversaRepository.Atualizar(conversa);
 
-            await _envioService.EnviarMensagem(
+            await Responder(
                 conversa.CON_TELEFONE,
                 "Envie uma foto da fachada do seu estabelecimento.");
         }
@@ -196,7 +210,7 @@ namespace API_WHATSAPP_SELLER.Services
 
                 await _conversaRepository.Atualizar(conversa);
 
-                await _envioService.EnviarMensagem(
+                await Responder(
                     conversa.CON_TELEFONE,
                     "Cadastro realizado!\n\n" +
                     "1 - Novo Pedido\n" +
@@ -206,7 +220,7 @@ namespace API_WHATSAPP_SELLER.Services
 
             if (midia == null || !TiposFotoAceitos.Contains(midia.ContentType))
             {
-                await _envioService.EnviarMensagem(
+                await Responder(
                     conversa.CON_TELEFONE,
                     "Envie uma foto (JPG, PNG ou WEBP) da fachada do seu estabelecimento.");
                 return;
@@ -219,7 +233,7 @@ namespace API_WHATSAPP_SELLER.Services
             }
             catch (MidiaMuitoGrandeException)
             {
-                await _envioService.EnviarMensagem(
+                await Responder(
                     conversa.CON_TELEFONE,
                     "Foto muito grande, envie outra.");
                 return;
@@ -228,7 +242,7 @@ namespace API_WHATSAPP_SELLER.Services
             {
                 // URL fora do Twilio só chega por webhook forjado; não loga a URL.
                 _logger.LogWarning("MediaUrl fora do Twilio recebida para {Telefone}", conversa.CON_TELEFONE);
-                await _envioService.EnviarMensagem(
+                await Responder(
                     conversa.CON_TELEFONE,
                     "Não consegui receber a foto, envie novamente.");
                 return;
@@ -236,7 +250,7 @@ namespace API_WHATSAPP_SELLER.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Falha ao baixar foto da fachada de {Telefone}", conversa.CON_TELEFONE);
-                await _envioService.EnviarMensagem(
+                await Responder(
                     conversa.CON_TELEFONE,
                     "Não consegui receber a foto, envie novamente.");
                 return;
@@ -244,7 +258,7 @@ namespace API_WHATSAPP_SELLER.Services
 
             if (baixada.Conteudo.Length == 0)
             {
-                await _envioService.EnviarMensagem(
+                await Responder(
                     conversa.CON_TELEFONE,
                     "Não consegui receber a foto, envie novamente.");
                 return;
@@ -281,7 +295,7 @@ namespace API_WHATSAPP_SELLER.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Falha ao criar cliente com foto para {Telefone}", conversa.CON_TELEFONE);
-                await _envioService.EnviarMensagem(
+                await Responder(
                     conversa.CON_TELEFONE,
                     "Erro ao finalizar cadastro, envie a foto novamente.");
                 return;
@@ -292,7 +306,7 @@ namespace API_WHATSAPP_SELLER.Services
 
             await _conversaRepository.Atualizar(conversa);
 
-            await _envioService.EnviarMensagem(
+            await Responder(
                 conversa.CON_TELEFONE,
                 "Cadastro realizado!\n\n" +
                 "1 - Novo Pedido\n" +
@@ -323,7 +337,7 @@ namespace API_WHATSAPP_SELLER.Services
                     conversa.CON_ULTIMA_MENSAGEM = string.Empty; // Limpa o acumulador
                     await _conversaRepository.Atualizar(conversa);
 
-                    await _envioService.EnviarMensagem(
+                    await Responder(
                         conversa.CON_TELEFONE,
                         "🛒 *Novo Pedido Iniciado*\n\n" +
                         "Digite a quantidade e o nome do produto que deseja adicionar (Ex: `1x sorvete de chocolate`).");
@@ -333,13 +347,13 @@ namespace API_WHATSAPP_SELLER.Services
                     conversa.CON_ETAPA = EtapaConversa.AcompanhandoPedido;
                     await _conversaRepository.Atualizar(conversa);
 
-                    await _envioService.EnviarMensagem(
+                    await Responder(
                         conversa.CON_TELEFONE,
                         "Informe o número do pedido.");
                     break;
 
                 default:
-                    await _envioService.EnviarMensagem(
+                    await Responder(
                         conversa.CON_TELEFONE,
                         "Opção inválida.\n\n" +
                         "1 - Novo Pedido\n" +
@@ -357,7 +371,7 @@ namespace API_WHATSAPP_SELLER.Services
             {
                 if (!conversa.CON_CLICODIGO.HasValue)
                 {
-                    await _envioService.EnviarMensagem(conversa.CON_TELEFONE, "Erro de identificação do cliente. Reiniciando...");
+                    await Responder(conversa.CON_TELEFONE, "Erro de identificação do cliente. Reiniciando...");
                     conversa.CON_ETAPA = EtapaConversa.AguardandoCpf;
                     conversa.CON_ULTIMA_MENSAGEM = string.Empty;
                     await _conversaRepository.Atualizar(conversa);
@@ -368,7 +382,7 @@ namespace API_WHATSAPP_SELLER.Services
 
                 if (string.IsNullOrWhiteSpace(corpoPedido))
                 {
-                    await _envioService.EnviarMensagem(
+                    await Responder(
                         conversa.CON_TELEFONE,
                         "Nenhum item foi adicionado ao pedido. Envie pelo menos um item ou digite o menu.");
                     return;
@@ -388,7 +402,7 @@ namespace API_WHATSAPP_SELLER.Services
                 conversa.CON_ULTIMA_MENSAGEM = string.Empty; // Limpa o carrinho
                 await _conversaRepository.Atualizar(conversa);
 
-                await _envioService.EnviarMensagem(
+                await Responder(
                     conversa.CON_TELEFONE,
                     $"✅ *Pedido finalizado com sucesso!*\n\n" +
                     $"📦 *Código do seu pedido:* `{idPedidoGerado}`\n" +
@@ -404,19 +418,19 @@ namespace API_WHATSAPP_SELLER.Services
             switch (validacao.Resultado)
             {
                 case ItemPedidoValidacaoResultado.FormatoInvalido:
-                    await _envioService.EnviarMensagem(
+                    await Responder(
                         conversa.CON_TELEFONE,
                         "Não entendi esse item, use o formato: 2x produto");
                     return;
 
                 case ItemPedidoValidacaoResultado.QuantidadeZero:
-                    await _envioService.EnviarMensagem(
+                    await Responder(
                         conversa.CON_TELEFONE,
                         "Não entendi esse item, use o formato: 2x produto");
                     return;
 
                 case ItemPedidoValidacaoResultado.QuantidadeMuitoAlta:
-                    await _envioService.EnviarMensagem(
+                    await Responder(
                         conversa.CON_TELEFONE,
                         "Quantidade muito alta, confirme o valor.");
                     return;
@@ -425,7 +439,7 @@ namespace API_WHATSAPP_SELLER.Services
                     break;
 
                 default:
-                    await _envioService.EnviarMensagem(
+                    await Responder(
                         conversa.CON_TELEFONE,
                         "Não entendi esse item, use o formato: 2x produto");
                     return;
@@ -442,7 +456,7 @@ namespace API_WHATSAPP_SELLER.Services
 
             await _conversaRepository.Atualizar(conversa);
 
-            await _envioService.EnviarMensagem(
+            await Responder(
                 conversa.CON_TELEFONE,
                 "➕ Item adicionado ao carrinho!\n\n" +
                 "Envie o próximo produto ou digite *terminar* para concluir o pedido.");
@@ -455,7 +469,7 @@ namespace API_WHATSAPP_SELLER.Services
             // Tenta converter o que o usuário digitou em um número de ID válido
             if (!int.TryParse(textoDigitado, out var codigoPedido))
             {
-                await _envioService.EnviarMensagem(
+                await Responder(
                     conversa.CON_TELEFONE,
                     "⚠️ Código inválido. Por favor, digite apenas o **número** do código do pedido (ex: `15`) ou envie `0` para voltar ao menu.");
                 return;
@@ -465,7 +479,7 @@ namespace API_WHATSAPP_SELLER.Services
             {
                 conversa.CON_ETAPA = EtapaConversa.MenuCliente;
                 await _conversaRepository.Atualizar(conversa);
-                await _envioService.EnviarMensagem(
+                await Responder(
                     conversa.CON_TELEFONE,
                     "Menu Principal:\n\n1 - Novo Pedido\n2 - Acompanhar Pedido");
                 return;
@@ -476,7 +490,7 @@ namespace API_WHATSAPP_SELLER.Services
 
             if (pedido == null)
             {
-                await _envioService.EnviarMensagem(
+                await Responder(
                     conversa.CON_TELEFONE,
                     $"❌ Não encontramos nenhum pedido com o código **{codigoPedido}**.\n\nVerifique o número e tente novamente ou digite `0` para voltar ao menu.");
                 return;
@@ -486,7 +500,7 @@ namespace API_WHATSAPP_SELLER.Services
             conversa.CON_ETAPA = EtapaConversa.MenuCliente;
             await _conversaRepository.Atualizar(conversa);
 
-            await _envioService.EnviarMensagem(
+            await Responder(
                 conversa.CON_TELEFONE,
                 $"📦 *Consulta de Pedido*\n\n" +
                 $"• *Código:* `{pedido.PED_CODIGO}`\n" +

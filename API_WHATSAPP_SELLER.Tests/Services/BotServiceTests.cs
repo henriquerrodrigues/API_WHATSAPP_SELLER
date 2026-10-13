@@ -490,5 +490,20 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             conversa.CON_ULTIMA_MENSAGEM.Should().BeNullOrEmpty();
             _envioServiceMock.Verify(t => t.EnviarMensagem(telefone, It.Is<string>(m => m.Contains("777"))), Times.Once);
         }
+
+        [Fact]
+        public async Task ProcessarMensagem_FalhaNoEnvio_NaoPropagaEGravaConversa()
+        {
+            var conversa = NovaConversa(EtapaConversa.AguardandoNome);
+            _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
+            _envioServiceMock
+                .Setup(t => t.EnviarMensagem(It.IsAny<string>(), It.IsAny<string>()))
+                .ThrowsAsync(new InvalidOperationException("Central respondeu 502"));
+
+            var act = () => Enviar(conversa.CON_TELEFONE, "Fulano");
+
+            await act.Should().NotThrowAsync();
+            _conversaRepositoryMock.Verify(r => r.Atualizar(It.Is<Conversa>(c => c.CON_ETAPA == EtapaConversa.AguardandoEmail)), Times.Once);
+        }
     }
 }
