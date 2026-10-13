@@ -544,5 +544,55 @@ namespace API_WHATSAPP_SELLER.Tests.Services
 
             _conversaRepositoryMock.Verify(r => r.Atualizar(It.IsAny<Conversa>()), Times.Never);
         }
+
+        [Fact]
+        public async Task ProcessarMensagem_FinalizadaComCliente_ReabreNoMenuEIgnoraTexto()
+        {
+            var conversa = NovaConversa(EtapaConversa.NovoPedido);
+            conversa.CON_STATUS = StatusConversa.Finalizada;
+            conversa.CON_CLICODIGO = 7;
+            _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
+
+            await Enviar(conversa.CON_TELEFONE, "1x sorvete de chocolate");
+
+            _conversaRepositoryMock.Verify(r => r.Atualizar(It.Is<Conversa>(c =>
+                c.CON_STATUS == StatusConversa.Ativa &&
+                c.CON_ETAPA == EtapaConversa.MenuCliente)), Times.Once);
+            _envioServiceMock.Verify(t => t.EnviarMensagem(
+                conversa.CON_TELEFONE,
+                It.Is<string>(m => m.Contains("1 - Novo Pedido") && m.Contains("2 - Acompanhar Pedido"))), Times.Once);
+            _pedidoServiceMock.Verify(s => s.ValidarLinhaItem(It.IsAny<string>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task ProcessarMensagem_FinalizadaSemCliente_ReabrePedindoCpf()
+        {
+            var conversa = NovaConversa(EtapaConversa.AguardandoEmail);
+            conversa.CON_STATUS = StatusConversa.Finalizada;
+            _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
+
+            await Enviar(conversa.CON_TELEFONE, "fulano@teste.com");
+
+            _conversaRepositoryMock.Verify(r => r.Atualizar(It.Is<Conversa>(c =>
+                c.CON_STATUS == StatusConversa.Ativa &&
+                c.CON_ETAPA == EtapaConversa.AguardandoCpf)), Times.Once);
+            _envioServiceMock.Verify(t => t.EnviarMensagem(
+                conversa.CON_TELEFONE,
+                "Olá! Seja bem-vindo.\n\nInforme seu CPF ou CNPJ para continuarmos."), Times.Once);
+        }
+
+        [Fact]
+        public async Task ProcessarMensagem_Cancelada_TambemReabre()
+        {
+            var conversa = NovaConversa(EtapaConversa.MenuCliente);
+            conversa.CON_STATUS = StatusConversa.Cancelada;
+            conversa.CON_CLICODIGO = 7;
+            _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
+
+            await Enviar(conversa.CON_TELEFONE, "2");
+
+            conversa.CON_STATUS.Should().Be(StatusConversa.Ativa);
+            conversa.CON_ETAPA.Should().Be(EtapaConversa.MenuCliente);
+        }
     }
 }

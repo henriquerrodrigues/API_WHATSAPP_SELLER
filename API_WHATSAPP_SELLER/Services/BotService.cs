@@ -15,6 +15,9 @@ namespace API_WHATSAPP_SELLER.Services
             "image/webp"
         };
 
+        private const string MensagemBoasVindas =
+            "Olá! Seja bem-vindo.\n\nInforme seu CPF ou CNPJ para continuarmos.";
+
         private readonly IEnvioMensagemService _envioService;
         private readonly IConversaRepository _conversaRepository;
         private readonly IClienteService _clienteService;
@@ -62,6 +65,12 @@ namespace API_WHATSAPP_SELLER.Services
             if (conversa == null)
             {
                 await IniciarConversa(mensagem.Telefone);
+                return;
+            }
+
+            if (conversa.CON_STATUS != StatusConversa.Ativa)
+            {
+                await ReabrirConversa(conversa);
                 return;
             }
 
@@ -121,9 +130,32 @@ namespace API_WHATSAPP_SELLER.Services
 
             await _conversaRepository.Criar(conversa);
 
-            await Responder(
-                telefone,
-                "Olá! Seja bem-vindo.\n\nInforme seu CPF ou CNPJ para continuarmos.");
+            await Responder(telefone, MensagemBoasVindas);
+        }
+
+        // Ticket fechado na central (reset): a primeira mensagem depois só reabre
+        // a conversa e o conteúdo dela é ignorado.
+        private async Task ReabrirConversa(Conversa conversa)
+        {
+            conversa.CON_STATUS = StatusConversa.Ativa;
+
+            if (conversa.CON_CLICODIGO.HasValue)
+            {
+                conversa.CON_ETAPA = EtapaConversa.MenuCliente;
+                await _conversaRepository.Atualizar(conversa);
+
+                await Responder(
+                    conversa.CON_TELEFONE,
+                    "Olá! Que bom te ver de novo.\n\n" +
+                    "1 - Novo Pedido\n" +
+                    "2 - Acompanhar Pedido");
+                return;
+            }
+
+            conversa.CON_ETAPA = EtapaConversa.AguardandoCpf;
+            await _conversaRepository.Atualizar(conversa);
+
+            await Responder(conversa.CON_TELEFONE, MensagemBoasVindas);
         }
 
         private async Task ProcessarCpf(Conversa conversa, string cpf)
