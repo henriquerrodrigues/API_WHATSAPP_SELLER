@@ -43,9 +43,10 @@ public class WhatsappController : ControllerBase
         // Marca antes de processar: a repetição que chega enquanto a primeira
         // ainda roda (ex.: download da foto) não executa o bot de novo.
         var messageSid = form["MessageSid"].ToString();
+        string? chave = null;
         if (!string.IsNullOrEmpty(messageSid))
         {
-            var chave = $"MessageSid:{messageSid}";
+            chave = $"MessageSid:{messageSid}";
             if (_cache.TryGetValue(chave, out _))
                 return Ok();
 
@@ -59,7 +60,17 @@ public class WhatsappController : ControllerBase
             Midia = LerPrimeiraMidia(form)
         };
 
-        await _botservice.ProcessarMensagem(mensagem);
+        try
+        {
+            await _botservice.ProcessarMensagem(mensagem);
+        }
+        catch
+        {
+            // Libera o SID para que o retry da central não seja engolido como duplicata.
+            if (chave != null)
+                _cache.Remove(chave);
+            throw;
+        }
 
         return Ok();
     }

@@ -140,11 +140,12 @@ namespace API_WHATSAPP_SELLER.Tests.Controllers
         }
 
         [Fact]
-        public async Task ReceberMensagem_MarcaMessageSidAntesDeProcessar()
+        public async Task ReceberMensagem_FalhaNoProcessamento_LiberaMessageSidParaRetry()
         {
             _botServiceMock
-                .Setup(b => b.ProcessarMensagem(It.IsAny<MensagemRecebida>()))
-                .ThrowsAsync(new InvalidOperationException("banco fora"));
+                .SetupSequence(b => b.ProcessarMensagem(It.IsAny<MensagemRecebida>()))
+                .ThrowsAsync(new InvalidOperationException("banco fora"))
+                .Returns(Task.CompletedTask);
 
             var primeira = () => ReceberComForm(Form("SM1"));
             await primeira.Should().ThrowAsync<InvalidOperationException>();
@@ -152,6 +153,20 @@ namespace API_WHATSAPP_SELLER.Tests.Controllers
             var segunda = await ReceberComForm(Form("SM1"));
 
             segunda.Should().BeOfType<OkResult>();
+            _botServiceMock.Verify(b => b.ProcessarMensagem(It.IsAny<MensagemRecebida>()), Times.Exactly(2));
+        }
+
+        [Fact]
+        public async Task ReceberMensagem_RepeticaoDuranteProcessamento_Ignorada()
+        {
+            IActionResult? interno = null;
+            _botServiceMock
+                .Setup(b => b.ProcessarMensagem(It.IsAny<MensagemRecebida>()))
+                .Returns(async () => interno = await ReceberComForm(Form("SM1")));
+
+            await ReceberComForm(Form("SM1"));
+
+            interno.Should().BeOfType<OkResult>();
             _botServiceMock.Verify(b => b.ProcessarMensagem(It.IsAny<MensagemRecebida>()), Times.Once);
         }
 
