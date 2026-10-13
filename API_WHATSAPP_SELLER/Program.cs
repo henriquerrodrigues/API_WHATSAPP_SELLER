@@ -18,6 +18,7 @@ builder.Configuration
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddMemoryCache();
 
 builder.Services.AddScoped<IConversaRepository, ConversaRepository>();
 builder.Services.AddScoped<IClienteRepository, ClienteRepository>();

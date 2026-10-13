@@ -4,6 +4,7 @@ using API_WHATSAPP_SELLER.Models;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Primitives;
 using Moq;
 using Xunit;
@@ -14,6 +15,7 @@ namespace API_WHATSAPP_SELLER.Tests.Controllers
     {
         private readonly Mock<IBotService> _botServiceMock = new();
         private readonly Mock<IEnvioMensagemService> _envioServiceMock = new();
+        private readonly IMemoryCache _cache = new MemoryCache(new MemoryCacheOptions());
         private MensagemRecebida? _recebida;
 
         public WhatsappControllerTests()
@@ -24,18 +26,34 @@ namespace API_WHATSAPP_SELLER.Tests.Controllers
                 .Returns(Task.CompletedTask);
         }
 
-        private async Task ReceberComForm(Dictionary<string, StringValues> campos)
+        private WhatsappController CriarController(Dictionary<string, StringValues> campos)
         {
             var httpContext = new DefaultHttpContext();
             httpContext.Request.ContentType = "application/x-www-form-urlencoded";
             httpContext.Request.Form = new FormCollection(campos);
 
-            var controller = new WhatsappController(_botServiceMock.Object, _envioServiceMock.Object)
+            return new WhatsappController(_botServiceMock.Object, _envioServiceMock.Object, _cache)
             {
                 ControllerContext = new ControllerContext { HttpContext = httpContext }
             };
+        }
 
-            await controller.ReceberMensagem();
+        private Task<IActionResult> ReceberComForm(Dictionary<string, StringValues> campos)
+        {
+            return CriarController(campos).ReceberMensagem();
+        }
+
+        private static Dictionary<string, StringValues> Form(string? messageSid)
+        {
+            var campos = new Dictionary<string, StringValues>
+            {
+                ["From"] = "whatsapp:+5511999999999",
+                ["Body"] = "oi",
+                ["NumMedia"] = "0"
+            };
+            if (messageSid != null)
+                campos["MessageSid"] = messageSid;
+            return campos;
         }
 
         [Fact]
@@ -88,6 +106,50 @@ namespace API_WHATSAPP_SELLER.Tests.Controllers
             await ReceberComForm(campos);
 
             _recebida!.Midia.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task ReceberMensagem_MessageSidRepetido_ProcessaUmaVezERespondeOk()
+        {
+            await ReceberComForm(Form("SM1"));
+            var segunda = await ReceberComForm(Form("SM1"));
+
+            segunda.Should().BeOfType<OkResult>();
+            _botServiceMock.Verify(b => b.ProcessarMensagem(It.IsAny<MensagemRecebida>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task ReceberMensagem_MessageSidsDiferentes_ProcessaAmbos()
+        {
+            await ReceberComForm(Form("SM1"));
+            await ReceberComForm(Form("SM2"));
+
+            _botServiceMock.Verify(b => b.ProcessarMensagem(It.IsAny<MensagemRecebida>()), Times.Exactly(2));
+        }
+
+        [Fact]
+        public async Task ReceberMensagem_SemMessageSid_ProcessaSempre()
+        {
+            await ReceberComForm(Form(null));
+            await ReceberComForm(Form(null));
+
+            _botServiceMock.Verify(b => b.ProcessarMensagem(It.IsAny<MensagemRecebida>()), Times.Exactly(2));
+        }
+
+        [Fact]
+        public async Task ReceberMensagem_MarcaMessageSidAntesDeProcessar()
+        {
+            _botServiceMock
+                .Setup(b => b.ProcessarMensagem(It.IsAny<MensagemRecebida>()))
+                .ThrowsAsync(new InvalidOperationException("banco fora"));
+
+            var primeira = () => ReceberComForm(Form("SM1"));
+            await primeira.Should().ThrowAsync<InvalidOperationException>();
+
+            var segunda = await ReceberComForm(Form("SM1"));
+
+            segunda.Should().BeOfType<OkResult>();
+            _botServiceMock.Verify(b => b.ProcessarMensagem(It.IsAny<MensagemRecebida>()), Times.Once);
         }
     }
 }
