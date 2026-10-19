@@ -8,7 +8,7 @@ namespace API_WHATSAPP_SELLER.Services
     {
         // Brasil não tem horário de verão desde 2019: Brasília é sempre UTC-3,
         // independente do fuso do servidor/container.
-        private static readonly TimeSpan FusoBrasilia = TimeSpan.FromHours(-3);
+        internal static readonly TimeSpan FusoBrasilia = TimeSpan.FromHours(-3);
 
         public static string Saudacao() => Saudacao(DateTimeOffset.UtcNow.ToOffset(FusoBrasilia).Hour);
 

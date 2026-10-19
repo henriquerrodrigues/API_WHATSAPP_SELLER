@@ -393,7 +393,8 @@ namespace API_WHATSAPP_SELLER.Services
                 {
                     PED_CLICODIGO = conversa.CON_CLICODIGO.Value,
                     PED_CORPO = corpoPedido, // Contém apenas os produtos puros enviados anteriormente
-                    PED_DATA_PEDIDO = DateTime.Now,
+                    // Horário de Brasília: o container roda em UTC.
+                    PED_DATA_PEDIDO = DateTimeOffset.UtcNow.ToOffset(MensagensBot.FusoBrasilia).DateTime,
                     PED_TOTAL = 0
                 };
 
