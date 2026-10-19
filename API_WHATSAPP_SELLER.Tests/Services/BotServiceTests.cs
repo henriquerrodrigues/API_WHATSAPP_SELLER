@@ -294,6 +294,28 @@ namespace API_WHATSAPP_SELLER.Tests.Services
         }
 
         [Fact]
+        public async Task ProcessarMensagem_AcompanhamentoSemClienteNaConversa_RetornaNaoEncontrado()
+        {
+            var conversa = NovaConversa(EtapaConversa.AcompanhandoPedido);
+            conversa.CON_CLICODIGO = null;
+            _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
+            _pedidoServiceMock.Setup(s => s.BuscarPorId(15)).ReturnsAsync(new Pedido
+            {
+                PED_CODIGO = "15",
+                PED_CLICODIGO = 7,
+                PED_STATUS = "Em preparo",
+                PED_DATA_PEDIDO = DateTime.Now
+            });
+
+            await Enviar(conversa.CON_TELEFONE, "15");
+
+            conversa.CON_ETAPA.Should().Be(EtapaConversa.AcompanhandoPedido);
+            _conversaRepositoryMock.Verify(r => r.Atualizar(It.IsAny<Conversa>()), Times.Never);
+            _envioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, MensagensBot.PedidoNaoEncontrado(15)), Times.Once);
+            _envioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, It.Is<string>(m => m.Contains("Em preparo"))), Times.Never);
+        }
+
+        [Fact]
         public async Task ProcessarMensagem_AcompanhamentoZero_VoltaMenu()
         {
             var conversa = NovaConversa(EtapaConversa.AcompanhandoPedido);
