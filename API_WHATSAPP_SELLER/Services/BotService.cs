@@ -15,9 +15,6 @@ namespace API_WHATSAPP_SELLER.Services
             "image/webp"
         };
 
-        private const string MensagemBoasVindas =
-            "Olá! Seja bem-vindo.\n\nInforme seu CPF ou CNPJ para continuarmos.";
-
         private readonly IEnvioMensagemService _envioService;
         private readonly IConversaRepository _conversaRepository;
         private readonly IClienteService _clienteService;
@@ -130,7 +127,7 @@ namespace API_WHATSAPP_SELLER.Services
 
             await _conversaRepository.Criar(conversa);
 
-            await Responder(telefone, MensagemBoasVindas);
+            await Responder(telefone, MensagensBot.BoasVindas());
         }
 
         // Ticket fechado na central (reset): a primeira mensagem depois só reabre
@@ -144,27 +141,21 @@ namespace API_WHATSAPP_SELLER.Services
                 conversa.CON_ETAPA = EtapaConversa.MenuCliente;
                 await _conversaRepository.Atualizar(conversa);
 
-                await Responder(
-                    conversa.CON_TELEFONE,
-                    "Olá! Que bom te ver de novo.\n\n" +
-                    "1 - Novo Pedido\n" +
-                    "2 - Acompanhar Pedido");
+                await Responder(conversa.CON_TELEFONE, MensagensBot.BoasVindasDeVolta());
                 return;
             }
 
             conversa.CON_ETAPA = EtapaConversa.AguardandoCpf;
             await _conversaRepository.Atualizar(conversa);
 
-            await Responder(conversa.CON_TELEFONE, MensagemBoasVindas);
+            await Responder(conversa.CON_TELEFONE, MensagensBot.BoasVindas());
         }
 
         private async Task ProcessarCpf(Conversa conversa, string cpf)
         {
             if (!_clienteService.TryNormalizarCpfCnpj(cpf, out var cpfNormalizado))
             {
-                await Responder(
-                    conversa.CON_TELEFONE,
-                    "CPF/CNPJ inválido, digite novamente.");
+                await Responder(conversa.CON_TELEFONE, MensagensBot.CpfInvalido);
                 return;
             }
 
@@ -180,11 +171,7 @@ namespace API_WHATSAPP_SELLER.Services
 
                 await _conversaRepository.Atualizar(conversa);
 
-                await Responder(
-                    conversa.CON_TELEFONE,
-                    $"Olá {cliente.CLI_NOME}!\n\n" +
-                    "1 - Novo Pedido\n" +
-                    "2 - Acompanhar Pedido");
+                await Responder(conversa.CON_TELEFONE, MensagensBot.ClienteEncontrado(cliente.CLI_NOME));
 
                 return;
             }
@@ -194,18 +181,14 @@ namespace API_WHATSAPP_SELLER.Services
 
             await _conversaRepository.Atualizar(conversa);
 
-            await Responder(
-                conversa.CON_TELEFONE,
-                "Não encontramos seu cadastro.\n\nQual seu nome?");
+            await Responder(conversa.CON_TELEFONE, MensagensBot.CadastroNaoEncontrado);
         }
 
         private async Task ProcessarNome(Conversa conversa, string nome)
         {
             if (!_clienteService.NomeValido(nome))
             {
-                await Responder(
-                    conversa.CON_TELEFONE,
-                    "Nome inválido, digite novamente.");
+                await Responder(conversa.CON_TELEFONE, MensagensBot.NomeInvalido);
                 return;
             }
 
@@ -214,18 +197,14 @@ namespace API_WHATSAPP_SELLER.Services
 
             await _conversaRepository.Atualizar(conversa);
 
-            await Responder(
-                conversa.CON_TELEFONE,
-                "Informe seu e-mail.");
+            await Responder(conversa.CON_TELEFONE, MensagensBot.PedirEmail(conversa.CON_NOME));
         }
 
         private async Task ProcessarEmail(Conversa conversa, string email)
         {
             if (!_clienteService.EmailValido(email))
             {
-                await Responder(
-                    conversa.CON_TELEFONE,
-                    "E-mail inválido, digite novamente.");
+                await Responder(conversa.CON_TELEFONE, MensagensBot.EmailInvalido);
                 return;
             }
 
@@ -234,9 +213,7 @@ namespace API_WHATSAPP_SELLER.Services
 
             await _conversaRepository.Atualizar(conversa);
 
-            await Responder(
-                conversa.CON_TELEFONE,
-                "Envie uma foto da fachada do seu estabelecimento.");
+            await Responder(conversa.CON_TELEFONE, MensagensBot.PedirFotoFachada);
         }
 
         // Foto é obrigatória: em qualquer falha a conversa fica em
@@ -254,19 +231,13 @@ namespace API_WHATSAPP_SELLER.Services
 
                 await _conversaRepository.Atualizar(conversa);
 
-                await Responder(
-                    conversa.CON_TELEFONE,
-                    "Cadastro realizado!\n\n" +
-                    "1 - Novo Pedido\n" +
-                    "2 - Acompanhar Pedido");
+                await Responder(conversa.CON_TELEFONE, MensagensBot.CadastroConcluido);
                 return;
             }
 
             if (midia == null || !TiposFotoAceitos.Contains(midia.ContentType))
             {
-                await Responder(
-                    conversa.CON_TELEFONE,
-                    "Envie uma foto (JPG, PNG ou WEBP) da fachada do seu estabelecimento.");
+                await Responder(conversa.CON_TELEFONE, MensagensBot.FotoFormatoInvalido);
                 return;
             }
 
@@ -277,34 +248,26 @@ namespace API_WHATSAPP_SELLER.Services
             }
             catch (MidiaMuitoGrandeException)
             {
-                await Responder(
-                    conversa.CON_TELEFONE,
-                    "Foto muito grande, envie outra.");
+                await Responder(conversa.CON_TELEFONE, MensagensBot.FotoMuitoGrande);
                 return;
             }
             catch (ArgumentException)
             {
                 // Host fora do Twilio/central só chega por webhook forjado; não loga a URL.
                 _logger.LogWarning("MediaUrl de host não permitido recebida para {Telefone}", conversa.CON_TELEFONE);
-                await Responder(
-                    conversa.CON_TELEFONE,
-                    "Não consegui receber a foto, envie novamente.");
+                await Responder(conversa.CON_TELEFONE, MensagensBot.FotoNaoRecebida);
                 return;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Falha ao baixar foto da fachada de {Telefone}", conversa.CON_TELEFONE);
-                await Responder(
-                    conversa.CON_TELEFONE,
-                    "Não consegui receber a foto, envie novamente.");
+                await Responder(conversa.CON_TELEFONE, MensagensBot.FotoNaoRecebida);
                 return;
             }
 
             if (baixada.Conteudo.Length == 0)
             {
-                await Responder(
-                    conversa.CON_TELEFONE,
-                    "Não consegui receber a foto, envie novamente.");
+                await Responder(conversa.CON_TELEFONE, MensagensBot.FotoNaoRecebida);
                 return;
             }
 
@@ -339,9 +302,7 @@ namespace API_WHATSAPP_SELLER.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Falha ao criar cliente com foto para {Telefone}", conversa.CON_TELEFONE);
-                await Responder(
-                    conversa.CON_TELEFONE,
-                    "Erro ao finalizar cadastro, envie a foto novamente.");
+                await Responder(conversa.CON_TELEFONE, MensagensBot.ErroAoFinalizarCadastro);
                 return;
             }
 
@@ -350,11 +311,7 @@ namespace API_WHATSAPP_SELLER.Services
 
             await _conversaRepository.Atualizar(conversa);
 
-            await Responder(
-                conversa.CON_TELEFONE,
-                "Cadastro realizado!\n\n" +
-                "1 - Novo Pedido\n" +
-                "2 - Acompanhar Pedido");
+            await Responder(conversa.CON_TELEFONE, MensagensBot.CadastroConcluido);
         }
 
         // Espelha internal/clienteconversa/domain/telefone.go (NormalizarTelefoneCliente)
@@ -381,27 +338,18 @@ namespace API_WHATSAPP_SELLER.Services
                     conversa.CON_ULTIMA_MENSAGEM = string.Empty; // Limpa o acumulador
                     await _conversaRepository.Atualizar(conversa);
 
-                    await Responder(
-                        conversa.CON_TELEFONE,
-                        "🛒 *Novo Pedido Iniciado*\n\n" +
-                        "Digite a quantidade e o nome do produto que deseja adicionar (Ex: `1x sorvete de chocolate`).");
+                    await Responder(conversa.CON_TELEFONE, MensagensBot.NovoPedidoIniciado);
                     break;
 
                 case "2":
                     conversa.CON_ETAPA = EtapaConversa.AcompanhandoPedido;
                     await _conversaRepository.Atualizar(conversa);
 
-                    await Responder(
-                        conversa.CON_TELEFONE,
-                        "Informe o número do pedido.");
+                    await Responder(conversa.CON_TELEFONE, MensagensBot.PedirNumeroPedido);
                     break;
 
                 default:
-                    await Responder(
-                        conversa.CON_TELEFONE,
-                        "Opção inválida.\n\n" +
-                        "1 - Novo Pedido\n" +
-                        "2 - Acompanhar Pedido");
+                    await Responder(conversa.CON_TELEFONE, MensagensBot.OpcaoInvalida);
                     break;
             }
         }
@@ -410,12 +358,23 @@ namespace API_WHATSAPP_SELLER.Services
         {
             var textoDigitado = mensagem.Trim();
 
+            // Desiste do pedido: descarta o carrinho e volta ao menu.
+            if (textoDigitado.Equals("cancelar", StringComparison.OrdinalIgnoreCase))
+            {
+                conversa.CON_ETAPA = EtapaConversa.MenuCliente;
+                conversa.CON_ULTIMA_MENSAGEM = string.Empty;
+                await _conversaRepository.Atualizar(conversa);
+
+                await Responder(conversa.CON_TELEFONE, MensagensBot.PedidoCancelado);
+                return;
+            }
+
             // Se o cliente digitou "terminar", processamos o carrinho atual sem incluir a palavra "terminar"
             if (textoDigitado.Equals("terminar", StringComparison.OrdinalIgnoreCase))
             {
                 if (!conversa.CON_CLICODIGO.HasValue)
                 {
-                    await Responder(conversa.CON_TELEFONE, "Erro de identificação do cliente. Reiniciando...");
+                    await Responder(conversa.CON_TELEFONE, MensagensBot.ErroIdentificacaoCliente);
                     conversa.CON_ETAPA = EtapaConversa.AguardandoCpf;
                     conversa.CON_ULTIMA_MENSAGEM = string.Empty;
                     await _conversaRepository.Atualizar(conversa);
@@ -426,9 +385,7 @@ namespace API_WHATSAPP_SELLER.Services
 
                 if (string.IsNullOrWhiteSpace(corpoPedido))
                 {
-                    await Responder(
-                        conversa.CON_TELEFONE,
-                        "Nenhum item foi adicionado ao pedido. Envie pelo menos um item ou digite o menu.");
+                    await Responder(conversa.CON_TELEFONE, MensagensBot.PedidoSemItens);
                     return;
                 }
 
@@ -446,13 +403,7 @@ namespace API_WHATSAPP_SELLER.Services
                 conversa.CON_ULTIMA_MENSAGEM = string.Empty; // Limpa o carrinho
                 await _conversaRepository.Atualizar(conversa);
 
-                await Responder(
-                    conversa.CON_TELEFONE,
-                    $"✅ *Pedido finalizado com sucesso!*\n\n" +
-                    $"📦 *Código do seu pedido:* `{idPedidoGerado}`\n" +
-                    $"Guarde esse número para acompanhar seu pedido futuramente.\n\n" +
-                    "1 - Novo Pedido\n" +
-                    "2 - Acompanhar Pedido");
+                await Responder(conversa.CON_TELEFONE, MensagensBot.PedidoFinalizado(idPedidoGerado, corpoPedido));
                 return;
             }
 
@@ -461,31 +412,19 @@ namespace API_WHATSAPP_SELLER.Services
 
             switch (validacao.Resultado)
             {
-                case ItemPedidoValidacaoResultado.FormatoInvalido:
-                    await Responder(
-                        conversa.CON_TELEFONE,
-                        "Não entendi esse item, use o formato: 2x produto");
-                    return;
-
                 case ItemPedidoValidacaoResultado.QuantidadeZero:
-                    await Responder(
-                        conversa.CON_TELEFONE,
-                        "Não entendi esse item, use o formato: 2x produto");
+                    await Responder(conversa.CON_TELEFONE, MensagensBot.ItemQuantidadeZero);
                     return;
 
                 case ItemPedidoValidacaoResultado.QuantidadeMuitoAlta:
-                    await Responder(
-                        conversa.CON_TELEFONE,
-                        "Quantidade muito alta, confirme o valor.");
+                    await Responder(conversa.CON_TELEFONE, MensagensBot.ItemQuantidadeMuitoAlta);
                     return;
 
                 case ItemPedidoValidacaoResultado.Valido:
                     break;
 
                 default:
-                    await Responder(
-                        conversa.CON_TELEFONE,
-                        "Não entendi esse item, use o formato: 2x produto");
+                    await Responder(conversa.CON_TELEFONE, MensagensBot.ItemFormatoInvalido);
                     return;
             }
 
@@ -500,10 +439,7 @@ namespace API_WHATSAPP_SELLER.Services
 
             await _conversaRepository.Atualizar(conversa);
 
-            await Responder(
-                conversa.CON_TELEFONE,
-                "➕ Item adicionado ao carrinho!\n\n" +
-                "Envie o próximo produto ou digite *terminar* para concluir o pedido.");
+            await Responder(conversa.CON_TELEFONE, MensagensBot.ItemAdicionado(conversa.CON_ULTIMA_MENSAGEM));
         }
 
         private async Task ProcessarAcompanhamentoPedido(Conversa conversa, string mensagem)
@@ -513,9 +449,7 @@ namespace API_WHATSAPP_SELLER.Services
             // Tenta converter o que o usuário digitou em um número de ID válido
             if (!int.TryParse(textoDigitado, out var codigoPedido))
             {
-                await Responder(
-                    conversa.CON_TELEFONE,
-                    "⚠️ Código inválido. Por favor, digite apenas o **número** do código do pedido (ex: `15`) ou envie `0` para voltar ao menu.");
+                await Responder(conversa.CON_TELEFONE, MensagensBot.NumeroPedidoInvalido);
                 return;
             }
 
@@ -523,9 +457,7 @@ namespace API_WHATSAPP_SELLER.Services
             {
                 conversa.CON_ETAPA = EtapaConversa.MenuCliente;
                 await _conversaRepository.Atualizar(conversa);
-                await Responder(
-                    conversa.CON_TELEFONE,
-                    "Menu Principal:\n\n1 - Novo Pedido\n2 - Acompanhar Pedido");
+                await Responder(conversa.CON_TELEFONE, MensagensBot.Menu);
                 return;
             }
 
@@ -534,9 +466,7 @@ namespace API_WHATSAPP_SELLER.Services
 
             if (pedido == null)
             {
-                await Responder(
-                    conversa.CON_TELEFONE,
-                    $"❌ Não encontramos nenhum pedido com o código **{codigoPedido}**.\n\nVerifique o número e tente novamente ou digite `0` para voltar ao menu.");
+                await Responder(conversa.CON_TELEFONE, MensagensBot.PedidoNaoEncontrado(codigoPedido));
                 return;
             }
 
@@ -546,12 +476,7 @@ namespace API_WHATSAPP_SELLER.Services
 
             await Responder(
                 conversa.CON_TELEFONE,
-                $"📦 *Consulta de Pedido*\n\n" +
-                $"• *Código:* `{pedido.PED_CODIGO}`\n" +
-                $"• *Status atual:* *{pedido.PED_STATUS ?? "Recebido"}*\n" +
-                $"• *Data:* {pedido.PED_DATA_PEDIDO:dd/MM/yyyy HH:mm}\n\n" +
-                "1 - Novo Pedido\n" +
-                "2 - Acompanhar Pedido");
+                MensagensBot.StatusPedido(pedido.PED_CODIGO, pedido.PED_STATUS, pedido.PED_DATA_PEDIDO));
         }
     }
 }
