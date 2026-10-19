@@ -464,8 +464,17 @@ namespace API_WHATSAPP_SELLER.Services
             // Busca o pedido no banco pelo ID informado
             var pedido = await _pedidoService.BuscarPorId(codigoPedido); // (Ou chame direto o repositório se preferir)
 
-            if (pedido == null)
+            // Pedido de outro cliente recebe a mesma resposta de inexistente, para não revelar que o número existe.
+            // CON_CLICODIGO nulo nunca casa com PED_CLICODIGO.
+            if (pedido == null || pedido.PED_CLICODIGO != conversa.CON_CLICODIGO)
             {
+                if (pedido != null)
+                {
+                    _logger.LogWarning(
+                        "Consulta de pedido {Pedido} de outro cliente por {Telefone}",
+                        codigoPedido, conversa.CON_TELEFONE);
+                }
+
                 await Responder(conversa.CON_TELEFONE, MensagensBot.PedidoNaoEncontrado(codigoPedido));
                 return;
             }

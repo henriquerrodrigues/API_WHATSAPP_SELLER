@@ -224,8 +224,15 @@ namespace API_WHATSAPP_SELLER.Tests.Services
         public async Task ProcessarMensagem_AcompanhamentoCodigoValidoExistente_RetornaStatus()
         {
             var conversa = NovaConversa(EtapaConversa.AcompanhandoPedido);
+            conversa.CON_CLICODIGO = 7;
             _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
-            _pedidoServiceMock.Setup(s => s.BuscarPorId(15)).ReturnsAsync(new Pedido { PED_CODIGO = "15", PED_STATUS = "Em preparo", PED_DATA_PEDIDO = DateTime.Now });
+            _pedidoServiceMock.Setup(s => s.BuscarPorId(15)).ReturnsAsync(new Pedido
+            {
+                PED_CODIGO = "15",
+                PED_CLICODIGO = 7,
+                PED_STATUS = "Em preparo",
+                PED_DATA_PEDIDO = DateTime.Now
+            });
 
             await Enviar(conversa.CON_TELEFONE, "15");
 
@@ -243,6 +250,28 @@ namespace API_WHATSAPP_SELLER.Tests.Services
             await Enviar(conversa.CON_TELEFONE, "99");
 
             _envioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, It.Is<string>(m => m.Contains("Não encontramos"))), Times.Once);
+        }
+
+        [Fact]
+        public async Task ProcessarMensagem_AcompanhamentoPedidoDeOutroCliente_RetornaNaoEncontrado()
+        {
+            var conversa = NovaConversa(EtapaConversa.AcompanhandoPedido);
+            conversa.CON_CLICODIGO = 7;
+            _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
+            _pedidoServiceMock.Setup(s => s.BuscarPorId(15)).ReturnsAsync(new Pedido
+            {
+                PED_CODIGO = "15",
+                PED_CLICODIGO = 8,
+                PED_STATUS = "Em preparo",
+                PED_DATA_PEDIDO = DateTime.Now
+            });
+
+            await Enviar(conversa.CON_TELEFONE, "15");
+
+            conversa.CON_ETAPA.Should().Be(EtapaConversa.AcompanhandoPedido);
+            _conversaRepositoryMock.Verify(r => r.Atualizar(It.IsAny<Conversa>()), Times.Never);
+            _envioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, MensagensBot.PedidoNaoEncontrado(15)), Times.Once);
+            _envioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, It.Is<string>(m => m.Contains("Em preparo"))), Times.Never);
         }
 
         [Fact]
