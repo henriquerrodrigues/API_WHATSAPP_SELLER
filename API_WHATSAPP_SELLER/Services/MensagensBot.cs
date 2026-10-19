@@ -147,6 +147,11 @@ namespace API_WHATSAPP_SELLER.Services
             "Guarde esse número: com ele você acompanha o seu pedido a qualquer momento pela opção *2* do menu.\n\n" +
             Menu;
 
+        public const string ErroAoRegistrarPedido =
+            "Desculpe, tivemos um problema ao registrar o seu pedido. 😕\n\n" +
+            "Não se preocupe: seus itens continuam salvos. " +
+            "Envie *terminar* para tentar novamente ou *cancelar* para desistir.";
+
         // ---------- Acompanhar pedido ----------
 
         private const string VoltarAoMenu = "Para voltar ao menu, envie *0*.";

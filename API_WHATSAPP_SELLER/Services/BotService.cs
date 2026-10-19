@@ -397,7 +397,18 @@ namespace API_WHATSAPP_SELLER.Services
                     PED_TOTAL = 0
                 };
 
-                var idPedidoGerado = await _pedidoService.CreatePedidoAsync(pedido);
+                int idPedidoGerado;
+                try
+                {
+                    idPedidoGerado = await _pedidoService.CreatePedidoAsync(pedido);
+                }
+                catch (Exception ex)
+                {
+                    // Carrinho e etapa ficam como estão: o cliente pode enviar "terminar" de novo.
+                    _logger.LogError(ex, "Falha ao criar pedido para {Telefone}", conversa.CON_TELEFONE);
+                    await Responder(conversa.CON_TELEFONE, MensagensBot.ErroAoRegistrarPedido);
+                    return;
+                }
 
                 conversa.CON_ETAPA = EtapaConversa.MenuCliente;
                 conversa.CON_ULTIMA_MENSAGEM = string.Empty; // Limpa o carrinho

@@ -209,6 +209,25 @@ namespace API_WHATSAPP_SELLER.Tests.Services
         }
 
         [Fact]
+        public async Task ProcessarMensagem_TerminarFalhaAoCriarPedido_MantemCarrinhoEAvisa()
+        {
+            var conversa = NovaConversa(EtapaConversa.NovoPedido);
+            conversa.CON_CLICODIGO = 7;
+            conversa.CON_ULTIMA_MENSAGEM = "2x pizza";
+            _conversaRepositoryMock.Setup(r => r.BuscaPorTelefone(conversa.CON_TELEFONE)).ReturnsAsync(conversa);
+            _pedidoServiceMock.Setup(s => s.CreatePedidoAsync(It.IsAny<Pedido>()))
+                .ThrowsAsync(new InvalidOperationException("banco fora"));
+
+            var act = () => Enviar(conversa.CON_TELEFONE, "terminar");
+
+            await act.Should().NotThrowAsync();
+            conversa.CON_ETAPA.Should().Be(EtapaConversa.NovoPedido);
+            conversa.CON_ULTIMA_MENSAGEM.Should().Be("2x pizza");
+            _conversaRepositoryMock.Verify(r => r.Atualizar(It.IsAny<Conversa>()), Times.Never);
+            _envioServiceMock.Verify(t => t.EnviarMensagem(conversa.CON_TELEFONE, MensagensBot.ErroAoRegistrarPedido), Times.Once);
+        }
+
+        [Fact]
         public async Task ProcessarMensagem_OpcaoMenuInvalida_EtapaNaoMuda()
         {
             var conversa = NovaConversa(EtapaConversa.MenuCliente);
