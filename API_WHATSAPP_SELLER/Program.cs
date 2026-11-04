@@ -13,25 +13,36 @@ builder.Configuration
     .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: false)
     .AddEnvironmentVariables();
 
-// Add services to the container.
+// ==========================================
+// 1. REGISTRO DE SERVIÇOS (Antes do Build)
+// ==========================================
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// Configuração do CORS para o Front-end (Angular na porta 4200)
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy =>
+        policy
+            .WithOrigins("http://localhost:4200")
+            .AllowAnyHeader()
+            .AllowAnyMethod());
+});
+
 builder.Services.AddScoped<IConversaRepository, ConversaRepository>();
 builder.Services.AddScoped<IClienteRepository, ClienteRepository>();
 builder.Services.AddScoped<IPedidoRepository, PedidoRepository>();
-
+builder.Services.AddScoped<IProdutoRepository, ProdutoRepository>();
 builder.Services.AddScoped<IClienteService, ClienteService>();
 builder.Services.AddScoped<IPedidoService, PedidoService>();
-
+builder.Services.AddScoped<ICatalogoService, CatalogoService>();
 builder.Services.AddScoped<ITwilioService, TwilioService>();
+
 builder.Services.Configure<TwilioSettings>(
     builder.Configuration.GetSection("Twilio")
 );
 
-// Timeout de 10 s cobre só até os headers; o serviço limita o tempo total
-// do download (o webhook do Twilio desiste em 15 s).
 builder.Services.AddHttpClient<ITwilioMidiaService, TwilioMidiaService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(10);
@@ -39,16 +50,22 @@ builder.Services.AddHttpClient<ITwilioMidiaService, TwilioMidiaService>(client =
 
 builder.Services.AddScoped<IBotService, BotService>();
 
-
+// Constrói a aplicação
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// ==========================================
+// 2. PIPELINE DE REQUISIÇÕES (Depois do Build)
+// ==========================================
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
+// Ativa a política de CORS criada acima
+app.UseCors("Frontend");
+
 app.UseAuthorization();
 app.MapControllers();
+
 app.Run();
