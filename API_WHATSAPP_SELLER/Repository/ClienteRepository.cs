@@ -103,7 +103,7 @@ namespace API_WHATSAPP_SELLER.Repository
                     CLI_CREATED_AT,
                     CLI_LAST_UPDATED_AT
                FROM
-                    TB_CLIENTE;                    
+                    tb_cliente;                    
             ";
 
             using var conn = Connection();
